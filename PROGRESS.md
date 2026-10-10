@@ -19,3 +19,6 @@
 - Resumed from verified checkpoint 6515fa2 (remote `dev` matched local; two green CI runs confirmed via `gh run list`).
 - Found uncommitted BSP tiling port (`src/layout/bsp.rs`, 21 tests) that did not compile: closure-type error in a test, then clippy MSRV mismatch (`is_multiple_of` needs 1.87). Fixed both; MSRV now 1.87.
 - Local (no-dependency crate, so offline cargo works): fmt clean, clippy `-D warnings` clean, 22 tests pass. CI result for this commit recorded below once it finishes.
+- Added `src/workspace.rs` (9 workspaces, focus, cycle, move, close) with 7 tests; local total 29 tests pass, clippy `-D warnings` clean.
+- Added `FEATURES.md` (Release 1 vs deferred).
+- Next: dependency research (PTY, VT parser, terminal I/O, TOML) with license checks, then modal input state machine.
