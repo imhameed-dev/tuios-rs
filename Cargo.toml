@@ -2,7 +2,7 @@
 name = "tuios-rs"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.87"
 license = "MIT"
 description = "Rust rewrite of TUIOS (core multiplexer first)"
 

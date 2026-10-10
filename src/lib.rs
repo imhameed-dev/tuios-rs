@@ -1,5 +1,7 @@
 //! tuios-rs: Rust rewrite of TUIOS (core multiplexer first).
 
+pub mod layout;
+
 /// Crate version, used by `--version` and tests.
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
