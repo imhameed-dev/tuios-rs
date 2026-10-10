@@ -160,6 +160,19 @@ impl Workspaces {
         true
     }
 
+    /// Flip the split holding the focused window of the active workspace.
+    pub fn rotate_focused(&mut self) {
+        let ws = &mut self.spaces[self.current];
+        if let Some(f) = ws.focused {
+            ws.tree.rotate_split(f);
+        }
+    }
+
+    /// Reset every split of the active workspace to an even ratio.
+    pub fn equalize_current(&mut self) {
+        self.spaces[self.current].tree.equalize();
+    }
+
     /// Rectangles for the active workspace.
     pub fn layout(&self, bounds: Rect, gap: i32) -> HashMap<WindowId, Rect> {
         self.spaces[self.current].tree.layout(bounds, gap)
@@ -237,6 +250,22 @@ mod tests {
         assert_eq!(w.layout(B, 0)[&b], B);
         assert!(!w.move_window(a, 99, B, 0));
         assert!(!w.move_window(777, 1, B, 0));
+    }
+
+    #[test]
+    fn rotate_and_equalize_change_the_active_layout() {
+        let mut w = Workspaces::new();
+        let a = w.new_window(B, 0);
+        let b = w.new_window(B, 0);
+        let before = w.layout(B, 0);
+        assert_eq!(before[&a].y, before[&b].y, "side by side at first");
+        w.rotate_focused();
+        let after = w.layout(B, 0);
+        assert_eq!(after[&a].x, after[&b].x, "stacked after rotate");
+        w.equalize_current();
+        assert_eq!(w.layout(B, 0).len(), 2);
+        // No focus, no panic.
+        Workspaces::new().rotate_focused();
     }
 
     #[test]

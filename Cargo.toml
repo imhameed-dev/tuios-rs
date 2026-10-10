@@ -7,6 +7,9 @@ license = "MIT"
 description = "Rust rewrite of TUIOS (core multiplexer first)"
 
 [dependencies]
+crossterm = "0.29"
+portable-pty = "0.9"
+vt100 = "0.16"
 
 [profile.release]
 opt-level = 3

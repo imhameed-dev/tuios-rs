@@ -1,9 +1,13 @@
 //! tuios-rs: Rust rewrite of TUIOS (core multiplexer first).
 
+pub mod app;
+pub mod event;
 pub mod input;
 pub mod layout;
 pub mod modal;
+pub mod pane;
 pub mod render;
+pub mod tty;
 pub mod workspace;
 
 /// Crate version, used by `--version` and tests.
