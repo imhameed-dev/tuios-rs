@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 
 use crate::event::{AppEvent, InputEvent};
-use crate::input::{encode, Key};
+use crate::input::{encode, paste_bytes, Key};
 use crate::layout::{Rect, WindowId};
 use crate::modal::{Command, Modal, Mode, Outcome};
 use crate::pane::Pane;
@@ -14,9 +14,6 @@ use crate::workspace::{Workspaces, WORKSPACE_COUNT};
 
 /// Cells reserved between tiled panes for the separator line.
 const GAP: i32 = 1;
-
-/// Pasted text must not be able to end bracketed-paste mode early.
-const PASTE_END: &str = "\x1b[201~";
 
 fn to_u16(v: i32) -> u16 {
     u16::try_from(v.max(0)).unwrap_or(u16::MAX)
@@ -109,13 +106,8 @@ impl App {
             return;
         }
         if let Some(p) = self.focused_pane() {
-            if p.bracketed_paste() {
-                p.write(b"\x1b[200~");
-                p.write(text.replace(PASTE_END, "").as_bytes());
-                p.write(PASTE_END.as_bytes());
-            } else {
-                p.write(text.replace("\r\n", "\r").replace('\n', "\r").as_bytes());
-            }
+            let bytes = paste_bytes(text, p.bracketed_paste());
+            p.write(&bytes);
         }
     }
 

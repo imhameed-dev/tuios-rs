@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::io::{self, Write};
 use std::process::ExitCode;
 use std::sync::mpsc;

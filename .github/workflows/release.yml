@@ -1,0 +1,155 @@
+name: Release build
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  TUIOS_REQUIRE_TOOLS: "1"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Install programs the compatibility tests drive
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends vim htop less bash jq
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: release-${{ runner.os }}-
+      - name: Build optimized binary
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          cargo build --release 2>&1 | tee ci-logs/release-build.log
+          {
+            echo "release binary bytes: $(stat -c %s target/release/tuios-rs)"
+            ls -l target/release/tuios-rs
+            file target/release/tuios-rs
+            echo "--- ldd"
+            ldd target/release/tuios-rs
+            rustc --version
+          } 2>&1 | tee ci-logs/size.log
+      - name: Build release test executables
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --release --no-run --message-format=json > ci-logs/test-artifacts.json
+          mkdir -p bundle
+          for t in e2e compat perf; do
+            exe=$(jq -r --arg t "$t" 'select(.reason=="compiler-artifact" and .target.name==$t and (.target.kind|index("test")) and .executable!=null) | .executable' ci-logs/test-artifacts.json | tail -1)
+            test -n "$exe"
+            cp "$exe" "bundle/$t"
+          done
+          cp scripts/ci-report.sh bundle/
+      - name: Measure memory and CPU (release binary)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --release --test perf -- --ignored --nocapture 2>&1 | tee ci-logs/perf.log
+      - name: Package
+        shell: bash
+        run: |
+          scripts/package-release.sh
+          cp dist/tuios-rs-linux-x86_64.tar.gz dist/tuios-rs-linux-x86_64.tar.gz.sha256 bundle/
+          mkdir -p /tmp/unpack && tar -xzf dist/tuios-rs-linux-x86_64.tar.gz -C /tmp/unpack
+          { /tmp/unpack/tuios-rs-linux-x86_64/tuios-rs --version
+            echo "tarball bytes: $(stat -c %s dist/tuios-rs-linux-x86_64.tar.gz)"
+            echo "license folders: $(ls /tmp/unpack/tuios-rs-linux-x86_64/licenses | wc -l)"
+            sha256sum dist/tuios-rs-linux-x86_64.tar.gz; } 2>&1 | tee ci-logs/version.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tuios-rs-linux-x86_64
+          path: |
+            dist/tuios-rs-linux-x86_64.tar.gz
+            dist/tuios-rs-linux-x86_64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-smoke-bundle
+          path: bundle
+      - name: Publish results as annotations
+        if: always()
+        run: scripts/ci-report.sh ci-logs
+      - name: Commit Cargo.lock if this build had to create or refresh it
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if ! git diff --quiet -- Cargo.lock; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "ci: update Cargo.lock"
+            git push origin HEAD:dev || echo "dev moved on; lock file not committed this time"
+          fi
+
+  arch-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-smoke-bundle
+          path: bundle
+      - name: Install the programs the tests drive (Arch packages)
+        run: |
+          pacman -Syu --noconfirm --needed vim less htop bash \
+            || pacman -Syu --noconfirm --needed --disable-sandbox vim less htop bash
+      - name: Test the release binary on Arch
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          { grep -E '^(PRETTY_NAME|BUILD_ID)' /etc/os-release; uname -r; pacman -Q glibc vim less htop bash; } 2>&1 | tee ci-logs/arch-env.log
+          tar -xzf bundle/tuios-rs-linux-x86_64.tar.gz -C bundle
+          export TUIOS_BIN="$PWD/bundle/tuios-rs-linux-x86_64/tuios-rs"
+          export TUIOS_REQUIRE_TOOLS=1 TERM=xterm-256color
+          "$TUIOS_BIN" --version 2>&1 | tee ci-logs/arch-version.log
+          chmod +x bundle/e2e bundle/compat "$TUIOS_BIN"
+          rc=0
+          ./bundle/e2e 2>&1 | tee ci-logs/arch-e2e.log || rc=1
+          ./bundle/compat 2>&1 | tee ci-logs/arch-compat.log || rc=1
+          exit $rc
+      - name: Publish results as annotations
+        if: always()
+        run: bash bundle/ci-report.sh ci-logs
+
+  publish:
+    needs: [build, arch-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tuios-rs-linux-x86_64
+          path: dist
+      - name: Publish rolling pre-release "dev-latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh release delete dev-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create dev-latest dist/tuios-rs-linux-x86_64.tar.gz dist/tuios-rs-linux-x86_64.tar.gz.sha256 \
+            --repo "$GITHUB_REPOSITORY" --prerelease --target "$sha" \
+            --title "tuios-rs dev build ${sha::7}" \
+            --notes "Early development build. Not ready for daily use.
+
+          - Commit: ${sha}
+          - Build and test run: ${run_url}
+          - Built on ubuntu-latest; this exact binary passed the end-to-end and compatibility tests inside an archlinux:latest container before being published.
+          - Install notes: README.md inside the tarball."
+          echo "::notice title=release-url::https://github.com/${GITHUB_REPOSITORY}/releases/download/dev-latest/tuios-rs-linux-x86_64.tar.gz"

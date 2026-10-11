@@ -130,6 +130,32 @@ pub fn encode(key: Key, app_cursor: bool) -> Vec<u8> {
     out
 }
 
+const PASTE_START: &str = "\x1b[200~";
+const PASTE_END: &str = "\x1b[201~";
+
+/// Bytes to send for pasted `text`.
+///
+/// With bracketed paste the text is wrapped in `ESC[200~ ... ESC[201~` and any
+/// end marker inside it is removed first, so pasted data cannot end the paste
+/// early and have the rest run as typed commands. Without bracketed paste,
+/// line breaks become carriage returns, which is what the Enter key sends.
+pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
+    if !bracketed {
+        return text.replace("\r\n", "\r").replace('\n', "\r").into_bytes();
+    }
+    // Removing one marker can join its neighbours into a new one
+    // ("ESC[2" + marker + "01~"), so repeat until none is left.
+    let mut clean = text.to_string();
+    while clean.contains(PASTE_END) {
+        clean = clean.replace(PASTE_END, "");
+    }
+    let mut out = Vec::with_capacity(clean.len() + 12);
+    out.extend_from_slice(PASTE_START.as_bytes());
+    out.extend_from_slice(clean.as_bytes());
+    out.extend_from_slice(PASTE_END.as_bytes());
+    out
+}
+
 fn alt_prefixed(out: &mut Vec<u8>, m: Mods, bytes: &[u8]) {
     if m.alt {
         out.push(0x1b);
@@ -267,6 +293,40 @@ mod tests {
         assert_eq!(encode(Key::new(KeyCode::Up, shift), true), b"\x1b[1;2A");
         assert_eq!(encode(Key::new(KeyCode::Right, ctrl), false), b"\x1b[1;5C");
         assert_eq!(encode(Key::new(KeyCode::Delete, ctrl), false), b"\x1b[3;5~");
+    }
+
+    #[test]
+    fn bracketed_paste_wraps_text() {
+        assert_eq!(paste_bytes("ls -l", true), b"\x1b[200~ls -l\x1b[201~");
+        assert_eq!(paste_bytes("", true), b"\x1b[200~\x1b[201~");
+    }
+
+    #[test]
+    fn bracketed_paste_keeps_newlines_unchanged() {
+        assert_eq!(paste_bytes("a\nb", true), b"\x1b[200~a\nb\x1b[201~");
+    }
+
+    #[test]
+    fn pasted_end_marker_cannot_escape_the_paste() {
+        let evil = "x\x1b[201~rm -rf ~\n";
+        let out = paste_bytes(evil, true);
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.matches("\x1b[201~").count(), 1, "{text:?}");
+        assert!(text.ends_with("\x1b[201~"));
+    }
+
+    #[test]
+    fn nested_end_marker_is_removed_completely() {
+        // Deleting the inner marker would otherwise leave a new one behind.
+        let evil = "\x1b[2\x1b[201~01~rm -rf ~";
+        let text = String::from_utf8(paste_bytes(evil, true)).unwrap();
+        assert_eq!(text.matches("\x1b[201~").count(), 1, "{text:?}");
+    }
+
+    #[test]
+    fn plain_paste_turns_line_breaks_into_enter() {
+        assert_eq!(paste_bytes("a\nb\r\nc", false), b"a\rb\rc");
+        assert_eq!(paste_bytes("é", false), "é".as_bytes());
     }
 
     #[test]

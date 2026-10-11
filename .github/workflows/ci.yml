@@ -8,14 +8,17 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  TUIOS_REQUIRE_TOOLS: "1"
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust (stable, with rustfmt and clippy)
         run: rustup toolchain install stable --profile minimal -c rustfmt -c clippy && rustup default stable
+      - name: Install programs the compatibility tests drive
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends vim htop less bash
       - uses: actions/cache@v4
         with:
           path: |
@@ -33,6 +36,17 @@ jobs:
           cargo clippy --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
           cargo build --all-targets 2>&1 | tee ci-logs/build.log
           cargo test --all 2>&1 | tee ci-logs/test.log
+      - name: Record dependency tree and code facts
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          cargo tree --target x86_64-unknown-linux-gnu --prefix none --format "{p} | {l}" 2>&1 | sort -u > ci-logs/deps.log || true
+          { echo "unsafe uses in src/ and tests/: $(grep -rnw unsafe src tests | wc -l)"
+            echo "forbid(unsafe_code) in: $(grep -l 'forbid(unsafe_code)' src/*.rs | tr '\n' ' ')"
+            echo "rust lines (src): $(cat src/*.rs src/layout/*.rs | wc -l)"
+            echo "rust lines (tests): $(cat tests/*.rs tests/common/*.rs | wc -l)"
+            rustc --version; cargo --version; } > ci-logs/code.log
       - name: Publish results as annotations
         if: always()
         run: scripts/ci-report.sh ci-logs

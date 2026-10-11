@@ -1,5 +1,7 @@
 //! tuios-rs: Rust rewrite of TUIOS (core multiplexer first).
 
+#![forbid(unsafe_code)]
+
 pub mod app;
 pub mod event;
 pub mod input;
