@@ -289,8 +289,9 @@ fn many_panes_on_a_small_terminal_are_refused_politely_not_crashed() {
         (6..20).contains(&opened),
         "expected a limit between 6 and 19 panes on 80x24, got {opened}"
     );
-    s.send("echo alive_$((7+7))\r");
-    s.wait_for("alive_14");
+    // The focused pane is tiny (about 4 columns), so use a very short answer.
+    s.send("echo $((6*7))\r");
+    s.wait_for("42");
     s.quit();
     assert!(s.exited_ok());
 }

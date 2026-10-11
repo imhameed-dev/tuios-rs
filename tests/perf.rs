@@ -132,6 +132,13 @@ fn measure_memory_and_cpu() {
     }
     snapshot(&s, 9);
 
+    // Heavy output goes to pane 1, the largest: the ninth pane is only about
+    // a dozen columns wide, which would wrap the marker below.
+    s.window_mode();
+    s.send("1");
+    s.send("i");
+    s.wait_for("TERMINAL");
+
     // Heavy output into the focused pane.
     let pid = s.pid();
     let ticks_before = cpu_ticks(pid);
