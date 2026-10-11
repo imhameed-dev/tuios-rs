@@ -28,3 +28,14 @@
 - CI job logs cannot be downloaded from this workspace, so CI now publishes test names and results as annotations (`scripts/ci-report.sh`).
 - Not verified: behavior on the user's laptop, RAM/CPU/binary size (not measured yet), vim/htop/less inside a pane, long-running output, paste.
 - Next: release-binary build in CI plus RSS/binary-size measurement; copy mode and scrollback; config; detach.
+
+## Day 3 (Oct 11)
+- Resumed from verified `50f9e4f`. Found unpushed work in the tree (release workflow, compat and perf tests, packaging, install guide, paste hardening); read all of it, ran the offline checks, and pushed it.
+- Annotation size: GitHub cuts annotations at about 4 KB, which hid test failures. `scripts/ci-report.sh` now emits failures first as errors, compresses passing test names, and splits long logs.
+- **Bug found by the new compatibility tests:** 11 panes on 80x24 crashed the app. Cause: `vt100` 0.16.2 overflows in `Grid::col_wrap` on 1-row screens (and on wide characters in 1-column screens). Fix: emulator and PTY never below 2x2; new pane refused if any pane would drop under 4x2; emulator panics caught per pane; panic messages now print on the restored terminal.
+- **Release pipeline works:** the release workflow builds, tests the exact binary inside `archlinux:latest`, then publishes the rolling pre-release `dev-latest`. Verified by downloading it anonymously (HTTP 200), checking the SHA-256, unpacking, and running `--version`.
+- Arch results: 5 end-to-end + 16 compatibility tests pass (vim, less, htop, bash, paste, Unicode, colors, resize, cleanup).
+- Measured (CI runner, not the laptop): binary 771,432 bytes; RSS 4.1 MB (1 pane), 5.0 MB (4), 5.2 MB (9); idle CPU 0.00 %. See `docs/PERFORMANCE.md`.
+- Dependencies audited: 45 third-party crates, all permissive, none copyleft (`DEPENDENCIES.md`).
+- Not verified: anything on the user's laptop; real terminal emulators; dwm key conflicts; neovim; zsh/fish.
+- Next: copy mode and scrollback browsing, then TOML config with rebindable keys, then attach/detach.
