@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::sync::mpsc;
 
 use tuios_rs::app::App;
-use tuios_rs::tty::{spawn_input_thread, TtyGuard};
+use tuios_rs::tty::{install_panic_hook, spawn_input_thread, TtyGuard};
 
 const HELP: &str = "\
 tuios-rs: terminal multiplexer (Rust rewrite of TUIOS, early version)
@@ -45,6 +45,7 @@ fn run() -> io::Result<()> {
         return Ok(());
     }
 
+    install_panic_hook();
     let _guard = TtyGuard::enter()?;
     let (cols, rows) = crossterm::terminal::size()?;
     let (tx, rx) = mpsc::channel();

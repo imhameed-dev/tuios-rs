@@ -32,13 +32,28 @@ impl TtyGuard {
     }
 }
 
+/// Put the terminal back as it was. Safe to call more than once.
+fn restore() {
+    let mut out = io::stdout();
+    let _ = execute!(out, DisableBracketedPaste, Show, LeaveAlternateScreen);
+    let _ = out.flush();
+    let _ = disable_raw_mode();
+}
+
 impl Drop for TtyGuard {
     fn drop(&mut self) {
-        let mut out = io::stdout();
-        let _ = execute!(out, DisableBracketedPaste, Show, LeaveAlternateScreen);
-        let _ = out.flush();
-        let _ = disable_raw_mode();
+        restore();
     }
+}
+
+/// On panic, restore the terminal *before* the message is printed. Otherwise
+/// the message lands on the alternate screen and vanishes when it closes.
+pub fn install_panic_hook() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore();
+        default(info);
+    }));
 }
 
 fn convert_key(k: KeyEvent) -> Option<Key> {

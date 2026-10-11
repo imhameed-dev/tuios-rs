@@ -35,7 +35,7 @@ jobs:
           cargo fmt --all -- --check 2>&1 | tee ci-logs/fmt.log
           cargo clippy --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
           cargo build --all-targets 2>&1 | tee ci-logs/build.log
-          cargo test --all 2>&1 | tee ci-logs/test.log
+          cargo test --all --no-fail-fast 2>&1 | tee ci-logs/test.log
       - name: Record dependency tree and code facts
         if: always()
         shell: bash

@@ -136,8 +136,10 @@ fn measure_memory_and_cpu() {
     let pid = s.pid();
     let ticks_before = cpu_ticks(pid);
     let start = Instant::now();
-    s.send("seq 1 300000\r");
-    s.wait_for_line("300000");
+    // The marker is computed by the shell, so it appears only once the
+    // output has finished (the typed command line contains `$((6*7))`).
+    s.send("seq 1 300000; echo flood_done_$((6*7))\r");
+    s.wait_for("flood_done_42");
     let secs = start.elapsed().as_secs_f64();
     let used = (cpu_ticks(pid) - ticks_before) as f64 / TICKS_PER_SEC;
     report("flood_300000_lines_wall_seconds", format!("{secs:.2}"));
