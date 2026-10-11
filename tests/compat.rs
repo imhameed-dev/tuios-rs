@@ -271,14 +271,39 @@ fn closing_a_pane_stops_its_foreground_program() {
 }
 
 #[test]
-fn many_panes_on_a_small_terminal_do_not_crash() {
+fn many_panes_on_a_small_terminal_are_refused_politely_not_crashed() {
+    // Regression: the emulator used to overflow on panes of 1 row or 1 column.
     let mut s = Session::start(24, 80);
-    for n in 2..=12 {
+    let mut opened = 1;
+    for n in 2..=20 {
         s.send("\x02c");
-        s.wait_for(&format!("pane {n}/{n}"));
+        s.wait_until("a new pane or a refusal", |s| {
+            s.text().contains(&format!("pane {n}/{n}")) || s.text().contains("no room")
+        });
+        if s.text().contains("no room") {
+            break;
+        }
+        opened = n;
     }
+    assert!(
+        (6..20).contains(&opened),
+        "expected a limit between 6 and 19 panes on 80x24, got {opened}"
+    );
     s.send("echo alive_$((7+7))\r");
     s.wait_for("alive_14");
     s.quit();
     assert!(s.exited_ok());
+}
+
+#[test]
+fn shrinking_the_terminal_to_a_sliver_does_not_crash() {
+    let mut s = Session::start(24, 80);
+    s.send("\x02c");
+    s.wait_for("pane 2/2");
+    for (rows, cols) in [(3, 5), (2, 6), (24, 80)] {
+        s.resize(rows, cols);
+        s.settle();
+    }
+    s.send("echo back_$((5+5))\r");
+    s.wait_for("back_10");
 }

@@ -51,6 +51,11 @@ impl Drop for TtyGuard {
 pub fn install_panic_hook() {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        // A panic inside the emulator is caught and recovered from, so it
+        // must not tear down the screen.
+        if crate::pane::EMULATOR_BUSY.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         restore();
         default(info);
     }));

@@ -2,6 +2,8 @@
 //! (`vt100`) that tracks what it has drawn.
 
 use std::io::{self, Read, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::thread;
 
@@ -12,6 +14,17 @@ use crate::layout::WindowId;
 
 /// Lines of scrollback kept per pane.
 const SCROLLBACK: usize = 1000;
+
+/// Smallest screen given to the emulator and the shell. `vt100` 0.16
+/// overflows (and panics in debug builds) when text wraps on a 1-row screen
+/// or a wide character meets a 1-column screen, so panes never go below 2x2.
+/// A pane drawn smaller than this is cropped on screen.
+const MIN_ROWS: u16 = 2;
+const MIN_COLS: u16 = 2;
+
+/// True while the emulator is parsing, so the panic hook stays quiet about a
+/// panic that `Pane` catches and recovers from.
+pub(crate) static EMULATOR_BUSY: AtomicBool = AtomicBool::new(false);
 
 fn pty_err(e: impl std::fmt::Display) -> io::Error {
     io::Error::other(e.to_string())
@@ -44,7 +57,7 @@ impl Pane {
         shell: &str,
         tx: Sender<AppEvent>,
     ) -> io::Result<Pane> {
-        let (rows, cols) = (rows.max(1), cols.max(1));
+        let (rows, cols) = (rows.max(MIN_ROWS), cols.max(MIN_COLS));
         let pair = native_pty_system()
             .openpty(pty_size(rows, cols))
             .map_err(pty_err)?;
@@ -84,8 +97,22 @@ impl Pane {
         })
     }
 
-    pub fn process(&mut self, bytes: &[u8]) {
-        self.parser.process(bytes);
+    /// Feed output to the emulator. Returns false if the emulator panicked
+    /// on this input; the pane's screen is then reset rather than letting one
+    /// bad escape sequence take down every pane.
+    pub fn process(&mut self, bytes: &[u8]) -> bool {
+        self.guarded(|parser| parser.process(bytes))
+    }
+
+    fn guarded(&mut self, f: impl FnOnce(&mut vt100::Parser)) -> bool {
+        EMULATOR_BUSY.store(true, Ordering::SeqCst);
+        let result = catch_unwind(AssertUnwindSafe(|| f(&mut self.parser)));
+        EMULATOR_BUSY.store(false, Ordering::SeqCst);
+        if result.is_err() {
+            self.parser = vt100::Parser::new(self.size.0, self.size.1, SCROLLBACK);
+            return false;
+        }
+        true
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
@@ -96,13 +123,13 @@ impl Pane {
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {
-        let (rows, cols) = (rows.max(1), cols.max(1));
+        let (rows, cols) = (rows.max(MIN_ROWS), cols.max(MIN_COLS));
         if (rows, cols) == self.size {
             return;
         }
         let _ = self.master.resize(pty_size(rows, cols));
-        self.parser.screen_mut().set_size(rows, cols);
         self.size = (rows, cols);
+        self.guarded(|parser| parser.screen_mut().set_size(rows, cols));
     }
 
     pub fn screen(&self) -> &vt100::Screen {

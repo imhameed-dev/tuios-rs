@@ -15,6 +15,10 @@ use crate::workspace::{Workspaces, WORKSPACE_COUNT};
 /// Cells reserved between tiled panes for the separator line.
 const GAP: i32 = 1;
 
+/// A new pane is refused if it would leave any pane smaller than this.
+const MIN_PANE_W: i32 = 4;
+const MIN_PANE_H: i32 = 2;
+
 fn to_u16(v: i32) -> u16 {
     u16::try_from(v.max(0)).unwrap_or(u16::MAX)
 }
@@ -77,7 +81,10 @@ impl App {
             AppEvent::Input(InputEvent::Eof) => self.quit = true,
             AppEvent::Output(id, bytes) => {
                 if let Some(p) = self.panes.get_mut(&id) {
-                    p.process(&bytes);
+                    if !p.process(&bytes) {
+                        self.notice =
+                            Some("terminal emulator error: a pane's screen was reset".to_string());
+                    }
                 }
             }
             AppEvent::Exit(id) => {
@@ -89,6 +96,7 @@ impl App {
     }
 
     fn on_key(&mut self, key: Key) {
+        self.notice = None;
         match self.modal.handle(key) {
             Outcome::Forward(k) => {
                 if let Some(p) = self.focused_pane() {
@@ -158,12 +166,21 @@ impl App {
     pub fn open_pane(&mut self) {
         let bounds = self.bounds();
         let id = self.ws.new_window(bounds, GAP);
-        let rect = self
-            .ws
-            .layout(bounds, GAP)
-            .get(&id)
-            .copied()
-            .unwrap_or(bounds);
+        let layout = self.ws.layout(bounds, GAP);
+        if layout.len() > 1
+            && layout
+                .values()
+                .any(|r| r.w < MIN_PANE_W || r.h < MIN_PANE_H)
+        {
+            self.ws.close_window(id);
+            self.notice = Some(format!(
+                "no room for another pane (minimum {MIN_PANE_W}x{MIN_PANE_H})"
+            ));
+            self.relayout();
+            self.sync_mode();
+            return;
+        }
+        let rect = layout.get(&id).copied().unwrap_or(bounds);
         match Pane::spawn(
             id,
             to_u16(rect.h),
