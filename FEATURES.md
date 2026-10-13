@@ -14,7 +14,7 @@ Status: **done** = implemented and covered by passing tests in CI on Linux; **pa
 | Terminal emulation | partial | `vt100` crate. Verified with vim, less, htop, bash (see compatibility table). Not supported: mouse reporting, kitty/sixel graphics, kitty keyboard protocol. |
 | Drawing, resize | done | diff renderer (10 unit tests); e2e resize; compat `htop_draws_in_color_follows_resize_and_quits`, `shrinking_the_terminal_to_a_sliver_does_not_crash` |
 | Modal keys (Terminal / Window mode, Ctrl+B prefix) | done, fixed keys | `src/modal.rs`, 9 unit tests; e2e `panes_modes_and_quit`. Keys follow upstream defaults; deviations are marked in the source. Not rebindable until config exists. |
-| Create / focus / close panes | done | e2e + compat. Focus is next / previous / Nth. Directional focus is not implemented. |
+| Create / focus / close panes | done | e2e + compat. Focus is next / previous / Nth; inactive panes are drawn faint. Directional focus is not implemented. |
 | Minimum pane size | done | New pane refused if any pane would drop under 4x2 (status bar says so). The emulator is never given less than 2x2. Compat `many_panes_on_a_small_terminal_are_refused_politely_not_crashed`. |
 | Paste (bracketed and plain) | done | `input::paste_bytes` (5 unit tests incl. end-marker injection); compat: one line, several lines, into bash with bracketed paste |
 | Cleanup (processes, terminal state) | done | compat: shell exit, killed shell, pane close stops foreground program, quit leaves no processes, quit restores alternate screen / cursor / bracketed paste |

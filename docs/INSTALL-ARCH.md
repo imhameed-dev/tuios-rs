@@ -60,4 +60,7 @@ To leave: Ctrl+B, Esc, then q (or close every shell with `exit`).
 - **Alt+number does nothing or switches a dwm tag**: dwm takes the key first. Use Ctrl+B then the number.
 - **The terminal is left garbled after a crash**: type `reset` and press Enter.
 - **Nothing happens when you press `q`**: `q` only quits in Window mode. Press Ctrl+B then Esc first.
+- **Tab does not switch panes**: the active pane is the bright one; the other panes are drawn faint, and the status bar shows `pane N/M`. Switching works in Window mode (Ctrl+B, then Esc, then Tab; Shift+Tab goes back). In Terminal mode, Ctrl+B then `n` / `p` also switches. If it still does nothing, record what the program received:
+  `TUIOS_KEYLOG=/tmp/keys.txt ./tuios-rs`, press Ctrl+B, Esc, Tab, quit, then send me `/tmp/keys.txt`.
+  The log shows each key and what it did. Text typed into a shell is never written to it.
 - Report problems at <https://github.com/imhameed-dev/tuios-rs/issues> with what you pressed and what you saw.

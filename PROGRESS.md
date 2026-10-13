@@ -39,3 +39,13 @@
 - Dependencies audited: 45 third-party crates, all permissive, none copyleft (`DEPENDENCIES.md`).
 - Not verified: anything on the user's laptop; real terminal emulators; dwm key conflicts; neovim; zsh/fish.
 - Next: copy mode and scrollback browsing, then TOML config with rebindable keys, then attach/detach.
+
+## Day 4 (Oct 13): pane focus bug
+- Report: on the real laptop, Ctrl+B Esc works but Tab does not switch the active pane.
+- Investigated before changing code: key conversion (`tty.rs`), modal state machine, `Workspaces::cycle_focus`, and rendering. Added `tests/focus.rs` driving the real binary in a PTY. Result in CI before the fix: Tab, Shift+Tab and three-pane cycling all worked when keys arrive one at a time.
+- **Defect reproduced:** when Esc and Tab arrive in one read (fast typing, loaded machine, or some terminals), crossterm reports Alt+Tab. After the prefix the modal layer swallowed any modified key, so Window mode was never entered and focus never changed. Fix in `src/modal.rs`: after the prefix, Alt+key means Esc then key; in Window mode Alt+key is read as the key.
+- **Weak indicator:** in Window mode the cursor is hidden and the separator highlight is the same for two panes, so a working switch was hard to see. Inactive panes are now drawn faint (`DIM`), and the status bar shows `pane N/M`.
+- **New diagnostics:** `TUIOS_KEYLOG=<file>` records each key and the decision taken, never text sent to a shell.
+- Tests added: 5 modal unit tests, 1 render unit test, 4 in-process tests (`tests/app_focus.rs`: both directions, typing reaches the focused shell only, dim follows focus, Esc+Tab coalescing), 7 PTY tests (`tests/focus.rs`). `focus` now also runs against the packaged binary inside `archlinux:latest` in the release workflow.
+- CI for commit 4c0f837 (runs 38389419908 and 38389419980): fmt, clippy `-D warnings`, build and tests pass; 67 unit, 4 app_focus, 16 compat, 5 e2e, 7 focus tests pass on the runner and on Arch.
+- Not verified: the user's own laptop, a real terminal emulator or dwm. The laptop's exact cause is unconfirmed; the Esc+Tab coalescing defect is the one that was reproduced.
