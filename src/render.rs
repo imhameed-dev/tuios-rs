@@ -17,6 +17,8 @@ pub const BOLD: u8 = 1;
 pub const ITALIC: u8 = 2;
 pub const UNDERLINE: u8 = 4;
 pub const INVERSE: u8 = 8;
+/// Faint text; used to show which pane is not focused.
+pub const DIM: u8 = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cell {
@@ -104,6 +106,9 @@ impl Frame {
 
 fn sgr(out: &mut String, (fg, bg, attrs): (Color, Color, u8)) {
     out.push_str("\x1b[0");
+    if attrs & DIM != 0 {
+        out.push_str(";2");
+    }
     if attrs & BOLD != 0 {
         out.push_str(";1");
     }
@@ -227,6 +232,24 @@ mod tests {
         assert_eq!(out.matches("\x1b[1;1H").count(), 1);
         assert!(out.contains("abc"));
         assert_eq!(out.matches('H').count(), 1);
+    }
+
+    #[test]
+    fn dim_attribute_becomes_sgr_2() {
+        let a = Frame::new(3, 1);
+        let mut b = Frame::new(3, 1);
+        b.set(
+            0,
+            0,
+            Cell {
+                text: "d".to_string(),
+                fg: Color::Default,
+                bg: Color::Default,
+                attrs: DIM,
+            },
+        );
+        let out = render_diff(Some(&a), &b);
+        assert!(out.contains("\x1b[0;2md"), "{out:?}");
     }
 
     #[test]

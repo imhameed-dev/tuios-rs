@@ -79,6 +79,10 @@ pub struct Session {
 
 impl Session {
     pub fn start(rows: u16, cols: u16) -> Session {
+        Session::start_with_env(rows, cols, &[])
+    }
+
+    pub fn start_with_env(rows: u16, cols: u16, env: &[(&str, &str)]) -> Session {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows,
@@ -90,6 +94,9 @@ impl Session {
         let mut cmd = CommandBuilder::new(bin_path());
         cmd.env("TERM", "xterm-256color");
         cmd.env("SHELL", "/bin/sh");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
         let child = pair.slave.spawn_command(cmd).expect("spawn tuios-rs");
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().expect("clone reader");

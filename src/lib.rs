@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod app;
+pub mod diag;
 pub mod event;
 pub mod input;
 pub mod layout;

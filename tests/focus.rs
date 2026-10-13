@@ -102,7 +102,7 @@ fn three_panes_cycle_in_order_both_ways() {
 #[test]
 fn tab_in_terminal_mode_goes_to_the_shell() {
     let mut s = two_panes();
-    s.send("cat -v\r");
+    s.send("cat -A\r");
     s.settle();
     s.send("\t\r");
     s.wait_for("^I");
@@ -122,4 +122,30 @@ fn window_mode_keys_do_not_leak_into_the_shell() {
     s.wait_for("TERMINAL");
     s.send("echo clean_$((1+1))\r");
     s.wait_for("clean_2");
+}
+
+#[test]
+fn key_log_records_the_tab_decision_and_hides_shell_input() {
+    let path = std::env::temp_dir().join(format!("tuios-keylog-{}.txt", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let path_str = path.to_str().unwrap().to_string();
+    let mut s = Session::start_with_env(24, 80, &[("TUIOS_KEYLOG", &path_str)]);
+    s.send("\x02c");
+    s.wait_for("pane 2/2");
+    s.wait_until("cursor in the right pane", cursor_in_right);
+    s.send("echo secret_$((20+22))\r");
+    s.wait_for("secret_42");
+    s.window_mode();
+    s.settle();
+    s.send("\t");
+    s.wait_for("pane 1/2");
+    let log = std::fs::read_to_string(&path).expect("key log written");
+    let _ = std::fs::remove_file(&path);
+    assert!(log.contains("action=FocusNext"), "{log}");
+    assert!(log.contains("window/pane2of2 -> window/pane1of2"), "{log}");
+    assert!(log.contains("key=(hidden)"), "{log}");
+    assert!(
+        !log.contains("secret") && !log.contains("'e'"),
+        "typed shell input must not be logged: {log}"
+    );
 }

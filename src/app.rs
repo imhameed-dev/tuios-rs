@@ -4,12 +4,13 @@
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 
+use crate::diag::KeyLog;
 use crate::event::{AppEvent, InputEvent};
 use crate::input::{encode, paste_bytes, Key};
 use crate::layout::{Rect, WindowId};
 use crate::modal::{Command, Modal, Mode, Outcome};
 use crate::pane::Pane;
-use crate::render::{render_diff, Cell, Color, Frame, BOLD, INVERSE, ITALIC, UNDERLINE};
+use crate::render::{render_diff, Cell, Color, Frame, BOLD, DIM, INVERSE, ITALIC, UNDERLINE};
 use crate::workspace::{Workspaces, WORKSPACE_COUNT};
 
 /// Cells reserved between tiled panes for the separator line.
@@ -41,6 +42,7 @@ pub struct App {
     shell: String,
     prev: Option<Frame>,
     notice: Option<String>,
+    keylog: Option<KeyLog>,
     pub quit: bool,
 }
 
@@ -55,6 +57,7 @@ impl App {
             shell,
             prev: None,
             notice: None,
+            keylog: KeyLog::from_env(),
             quit: false,
         }
     }
@@ -97,7 +100,14 @@ impl App {
 
     fn on_key(&mut self, key: Key) {
         self.notice = None;
-        match self.modal.handle(key) {
+        let before = self.keylog.is_some().then(|| self.state_label());
+        let outcome = self.modal.handle(key);
+        let (shown, action) = match outcome {
+            Outcome::Forward(_) => (None, "forward-to-pane".to_string()),
+            Outcome::Run(cmd) => (Some(format!("{key:?}")), format!("{cmd:?}")),
+            Outcome::Ignore => (Some(format!("{key:?}")), "none".to_string()),
+        };
+        match outcome {
             Outcome::Forward(k) => {
                 if let Some(p) = self.focused_pane() {
                     let bytes = encode(k, p.app_cursor());
@@ -107,6 +117,54 @@ impl App {
             Outcome::Run(cmd) => self.run(cmd),
             Outcome::Ignore => {}
         }
+        if let Some(before) = before {
+            let after = self.state_label();
+            if let Some(log) = self.keylog.as_mut() {
+                log.key(shown.as_deref(), &before, &after, &action);
+            }
+        }
+    }
+
+    /// "mode/focused-pane-of-count" for the key log.
+    fn state_label(&self) -> String {
+        let mode = if self.modal.prefix_armed() {
+            "prefix"
+        } else {
+            match self.modal.mode() {
+                Mode::Terminal => "terminal",
+                Mode::Window => "window",
+            }
+        };
+        let n = self.ws.windows_in(self.ws.current()).len();
+        format!("{mode}/pane{}of{n}", self.focused_index().unwrap_or(0))
+    }
+
+    /// 1-based position of the focused pane in the current workspace.
+    pub fn focused_index(&self) -> Option<usize> {
+        let f = self.ws.focused()?;
+        let ids = self.ws.windows_in(self.ws.current());
+        ids.iter().position(|i| *i == f).map(|p| p + 1)
+    }
+
+    /// Number of panes in the current workspace.
+    pub fn pane_count(&self) -> usize {
+        self.ws.windows_in(self.ws.current()).len()
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.modal.mode()
+    }
+
+    /// Text on the screen of the Nth (1-based) pane of the current workspace.
+    pub fn pane_text(&self, index: usize) -> Option<String> {
+        let ids = self.ws.windows_in(self.ws.current());
+        let id = index.checked_sub(1).and_then(|i| ids.get(i))?;
+        self.panes.get(id).map(|p| p.screen().contents())
+    }
+
+    /// The last frame returned by `render`.
+    pub fn last_frame(&self) -> Option<&Frame> {
+        self.prev.as_ref()
     }
 
     fn on_paste(&mut self, text: &str) {
@@ -248,6 +306,9 @@ impl App {
                 continue;
             };
             let screen = pane.screen();
+            // With several panes, the ones without focus are drawn faint so
+            // the active one is always visible, in every mode.
+            let dim = layout.len() > 1 && Some(*id) != focused;
             for row in 0..r.h {
                 for col in 0..r.w {
                     let (x, y) = (to_u16(r.x + col), to_u16(r.y + row));
@@ -274,6 +335,9 @@ impl App {
                                 }
                                 if c.inverse() {
                                     attrs |= INVERSE;
+                                }
+                                if dim {
+                                    attrs |= DIM;
                                 }
                                 Cell {
                                     text,

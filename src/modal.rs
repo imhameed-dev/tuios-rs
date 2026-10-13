@@ -94,6 +94,21 @@ impl Modal {
             // Prefix twice sends the prefix key itself.
             return Outcome::Forward(key);
         }
+        // Terminals send Esc as a lone ESC byte, and when the next key
+        // arrives in the same read (a quick Ctrl+B, Esc, Tab, or a loaded
+        // machine) the input layer reports "Esc then Tab" as Alt+Tab.
+        // Treat Alt+key after the prefix as Esc followed by that key:
+        // enter Window mode and run the key there.
+        if key.mods.alt && !key.mods.ctrl {
+            self.mode = Mode::Window;
+            return self.handle_window(Key::new(
+                key.code,
+                Mods {
+                    alt: false,
+                    ..key.mods
+                },
+            ));
+        }
         if key.mods != Mods::NONE {
             return Outcome::Ignore;
         }
@@ -116,6 +131,19 @@ impl Modal {
     }
 
     fn handle_window(&mut self, key: Key) -> Outcome {
+        // In Window mode Esc is a no-op, so Esc+key arriving together
+        // (reported as Alt+key) means the key.
+        let key = if key.mods.alt && !key.mods.ctrl {
+            Key::new(
+                key.code,
+                Mods {
+                    alt: false,
+                    ..key.mods
+                },
+            )
+        } else {
+            key
+        };
         if key.mods == Mods::NONE {
             match key.code {
                 KeyCode::Char('n') => return Outcome::Run(Command::NewPane),
@@ -269,6 +297,92 @@ mod tests {
     fn quit_is_not_reachable_from_terminal_mode_by_plain_q() {
         let mut m = modal();
         assert_eq!(m.handle(Key::ch('q')), Outcome::Forward(Key::ch('q')));
+    }
+
+    #[test]
+    fn prefix_then_alt_tab_is_esc_then_tab() {
+        // Ctrl+B, Esc, Tab read in one burst arrives as Ctrl+B, Alt+Tab.
+        let mut m = modal();
+        m.handle(PREFIX);
+        let alt_tab = Key::new(
+            KeyCode::Tab,
+            Mods {
+                alt: true,
+                ..Mods::NONE
+            },
+        );
+        assert_eq!(m.handle(alt_tab), Outcome::Run(Command::FocusNext));
+        assert_eq!(m.mode(), Mode::Window);
+        assert!(!m.prefix_armed());
+    }
+
+    #[test]
+    fn prefix_then_alt_other_keys_enter_window_mode_and_act() {
+        let mut m = modal();
+        m.handle(PREFIX);
+        assert_eq!(m.handle(Key::alt('n')), Outcome::Run(Command::NewPane));
+        assert_eq!(m.mode(), Mode::Window);
+        // Alt+BackTab arrives as Esc + Shift+Tab.
+        let mut b = modal();
+        b.handle(PREFIX);
+        let alt_back = Key::new(
+            KeyCode::BackTab,
+            Mods {
+                alt: true,
+                ..Mods::NONE
+            },
+        );
+        assert_eq!(b.handle(alt_back), Outcome::Run(Command::FocusPrev));
+        // An unbound key still enters Window mode (the Esc was real).
+        let mut u = modal();
+        u.handle(PREFIX);
+        assert_eq!(u.handle(Key::alt('z')), Outcome::Ignore);
+        assert_eq!(u.mode(), Mode::Window);
+    }
+
+    #[test]
+    fn alt_tab_in_window_mode_still_switches_focus() {
+        let mut m = modal();
+        m.enter_window_mode();
+        let alt_tab = Key::new(
+            KeyCode::Tab,
+            Mods {
+                alt: true,
+                ..Mods::NONE
+            },
+        );
+        assert_eq!(m.handle(alt_tab), Outcome::Run(Command::FocusNext));
+    }
+
+    #[test]
+    fn alt_tab_without_prefix_goes_to_the_shell() {
+        let mut m = modal();
+        let alt_tab = Key::new(
+            KeyCode::Tab,
+            Mods {
+                alt: true,
+                ..Mods::NONE
+            },
+        );
+        assert_eq!(m.handle(alt_tab), Outcome::Forward(alt_tab));
+    }
+
+    #[test]
+    fn tab_cycles_both_ways_without_leaving_window_mode() {
+        let mut m = modal();
+        m.handle(PREFIX);
+        m.handle(Key::plain(KeyCode::Esc));
+        for _ in 0..3 {
+            assert_eq!(
+                m.handle(Key::plain(KeyCode::Tab)),
+                Outcome::Run(Command::FocusNext)
+            );
+            assert_eq!(
+                m.handle(Key::plain(KeyCode::BackTab)),
+                Outcome::Run(Command::FocusPrev)
+            );
+            assert_eq!(m.mode(), Mode::Window);
+        }
     }
 
     #[test]
