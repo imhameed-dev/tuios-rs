@@ -186,6 +186,12 @@ impl Session {
         })
     }
 
+    /// Cursor position as (row, column) on the outer screen. In Terminal mode
+    /// it sits inside the focused pane, so it shows which pane has focus.
+    pub fn cursor(&self) -> (u16, u16) {
+        self.screen.lock().unwrap().screen().cursor_position()
+    }
+
     /// (alternate screen on, cursor hidden, bracketed paste on) as the
     /// outer terminal currently sees them.
     pub fn outer_modes(&self) -> (bool, bool, bool) {
