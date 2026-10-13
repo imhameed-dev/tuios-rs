@@ -149,3 +149,62 @@ fn a_single_pane_is_not_dimmed() {
     let frame = app.last_frame().unwrap();
     assert_eq!(frame.get(0, 0).unwrap().attrs & DIM, 0);
 }
+
+#[test]
+fn prefix_tab_repeated_cycles_focus_and_keeps_terminal_mode() {
+    let mut h = Harness::new();
+    for want in [1, 2, 1, 2, 1, 2] {
+        h.key(Key::ctrl('b'));
+        h.key(Key::plain(KeyCode::Tab));
+        assert_eq!(h.app.focused_index(), Some(want));
+        assert_eq!(h.app.mode(), Mode::Terminal);
+    }
+    h.key(Key::ctrl('b'));
+    h.key(Key::plain(KeyCode::BackTab));
+    assert_eq!(h.app.focused_index(), Some(1));
+    // Typing now reaches pane 1 only.
+    h.type_text("echo p1_$((20+22))");
+    h.key(Key::plain(KeyCode::Enter));
+    assert!(h.wait_pane(1, "p1_42"), "{:?}", h.app.pane_text(1));
+    assert!(!h.app.pane_text(2).unwrap().contains("p1_42"));
+}
+
+#[test]
+fn prefix_and_window_keys_never_appear_in_either_shell() {
+    let mut h = Harness::new();
+    h.key(Key::ctrl('b'));
+    h.key(Key::plain(KeyCode::Tab));
+    h.window_mode();
+    for k in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Tab] {
+        h.key(Key::plain(k));
+    }
+    h.type_text("nxr=z"); // window-mode commands (q would quit the app)
+                          // `n` opened a pane and `x` closed it; no shell may have received letters.
+    h.pump(Duration::from_millis(300));
+    for i in 1..=h.app.pane_count() {
+        let t = h.app.pane_text(i).unwrap();
+        assert!(!t.contains("nxr"), "pane {i}: {t:?}");
+    }
+}
+
+#[test]
+fn status_line_text_follows_the_mode() {
+    let mut h = Harness::new();
+    h.app.render();
+    let t = h.app.status_text().unwrap();
+    assert!(
+        t.contains("TERMINAL") && t.contains("Ctrl+B: c new, Tab next, Esc window"),
+        "{t}"
+    );
+    h.key(Key::ctrl('b'));
+    h.app.render();
+    let t = h.app.status_text().unwrap();
+    assert!(t.contains("PREFIX") && t.contains("Esc window"), "{t}");
+    h.key(Key::plain(KeyCode::Esc));
+    h.app.render();
+    let t = h.app.status_text().unwrap();
+    assert!(
+        t.contains("WINDOW") && t.contains("q quit") && t.contains("pane 2/2"),
+        "{t}"
+    );
+}

@@ -12,17 +12,21 @@ tuios-rs: terminal multiplexer (Rust rewrite of TUIOS, early version)
 
 Usage: tuios-rs [--version | --help]
 
-Keys (Terminal mode, the default):
-  Ctrl+B Esc     switch to Window mode
-  Ctrl+B c       new pane        Ctrl+B x   close pane
-  Ctrl+B n / p   next / previous pane
-  Ctrl+B 1-9     switch workspace (Alt+1-9 also works)
-  Ctrl+B Ctrl+B  send a literal Ctrl+B
+Terminal mode (the default; status bar says TERMINAL): your typing goes to
+the shell in the active pane. The prefix is Ctrl+B:
+  Ctrl+B Tab      next pane (stay in Terminal mode)    Shift+Tab / p  previous
+  Ctrl+B c        new pane        Ctrl+B x   close pane
+  Ctrl+B Esc      switch to Window mode
+  Ctrl+B 1-9      switch workspace (Alt+1-9 also works)
+  Ctrl+B Ctrl+B   send a literal Ctrl+B to the shell
 
-Window mode:
-  n new pane   x or w close   Tab / Shift+Tab focus
-  1-9 focus Nth pane   r rotate split   = equalize
-  i or Enter back to Terminal mode   q quit
+Window mode (status bar says WINDOW): keys are commands, nothing reaches the shell.
+  Tab / Shift+Tab next / previous pane     1-9  focus the Nth pane
+  n new pane   x or w close   r rotate split   = equalize
+  i or Enter back to Terminal mode         q  quit
+
+To quit: Ctrl+B, Esc, then q (or close every shell with exit).
+The active pane is bright; the others are drawn faint.
 ";
 
 fn flush(app: &mut App) -> io::Result<()> {

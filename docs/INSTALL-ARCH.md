@@ -33,24 +33,40 @@ Third-party license texts are in the `licenses/` folder of the tarball.
 
 ## Keys
 
-You start in Terminal mode: everything you type goes to the shell, except the
-prefix key Ctrl+B.
+The status bar shows the current mode, workspace, active pane and the keys
+that apply right now. The active pane is bright; the other panes are faint.
+
+**Terminal mode** (status bar says TERMINAL; the default). Everything you type
+goes to the shell in the active pane, except the prefix key Ctrl+B:
 
 | Keys | What it does |
 |---|---|
-| Ctrl+B then Esc | switch to Window mode |
 | Ctrl+B then c | new pane |
-| Ctrl+B then x | close the pane |
-| Ctrl+B then n / p | next / previous pane |
+| Ctrl+B then Tab | next pane, stays in Terminal mode |
+| Ctrl+B then Shift+Tab or p | previous pane |
+| Ctrl+B then n | next pane (same as Tab) |
+| Ctrl+B then x | close the active pane |
+| Ctrl+B then Esc | switch to Window mode |
 | Ctrl+B then 1-9 | switch workspace |
 | Alt+1-9 | switch workspace (may clash with dwm shortcuts if Alt is your dwm key) |
-| Ctrl+B then Ctrl+B | send a literal Ctrl+B |
+| Ctrl+B then Ctrl+B | send a literal Ctrl+B to the shell |
 
-In Window mode (status bar says WINDOW): `n` new pane, `x` or `w` close,
-`Tab` / `Shift+Tab` focus, `1`-`9` focus the Nth pane, `r` rotate the split,
-`=` equalize, `i` or `Enter` back to Terminal mode, `q` quit.
+After Ctrl+B the bar says PREFIX until you press the next key.
 
-To leave: Ctrl+B, Esc, then q (or close every shell with `exit`).
+**Window mode** (status bar says WINDOW). Keys are commands and nothing reaches
+the shell:
+
+| Keys | What it does |
+|---|---|
+| Tab / Shift+Tab | next / previous pane |
+| 1-9 | focus the Nth pane of this workspace |
+| n | new pane |
+| x or w | close the active pane |
+| r / = | rotate the split / equalize sizes |
+| i or Enter | back to Terminal mode |
+| q | quit |
+
+To quit: Ctrl+B, Esc, then q (or close every shell with `exit`).
 
 ## Troubleshooting
 
@@ -60,7 +76,7 @@ To leave: Ctrl+B, Esc, then q (or close every shell with `exit`).
 - **Alt+number does nothing or switches a dwm tag**: dwm takes the key first. Use Ctrl+B then the number.
 - **The terminal is left garbled after a crash**: type `reset` and press Enter.
 - **Nothing happens when you press `q`**: `q` only quits in Window mode. Press Ctrl+B then Esc first.
-- **Tab does not switch panes**: the active pane is the bright one; the other panes are drawn faint, and the status bar shows `pane N/M`. Switching works in Window mode (Ctrl+B, then Esc, then Tab; Shift+Tab goes back). In Terminal mode, Ctrl+B then `n` / `p` also switches. If it still does nothing, record what the program received:
+- **Tab does not switch panes**: the active pane is the bright one; the other panes are drawn faint, and the status bar shows `pane N/M`. Press Ctrl+B and then Tab (no need to enter Window mode); Shift+Tab or `p` goes back. In Window mode, plain Tab / Shift+Tab switch. If it still does nothing, record what the program received:
   `TUIOS_KEYLOG=/tmp/keys.txt ./tuios-rs`, press Ctrl+B, Esc, Tab, quit, then send me `/tmp/keys.txt`.
   The log shows each key and what it did. Text typed into a shell is never written to it.
 - Report problems at <https://github.com/imhameed-dev/tuios-rs/issues> with what you pressed and what you saw.

@@ -8,7 +8,7 @@ use crate::diag::KeyLog;
 use crate::event::{AppEvent, InputEvent};
 use crate::input::{encode, paste_bytes, Key};
 use crate::layout::{Rect, WindowId};
-use crate::modal::{Command, Modal, Mode, Outcome};
+use crate::modal::{Command, Modal, Mode, Outcome, HINT_PREFIX, HINT_TERMINAL, HINT_WINDOW};
 use crate::pane::Pane;
 use crate::render::{render_diff, Cell, Color, Frame, BOLD, DIM, INVERSE, ITALIC, UNDERLINE};
 use crate::workspace::{Workspaces, WORKSPACE_COUNT};
@@ -160,6 +160,18 @@ impl App {
         let ids = self.ws.windows_in(self.ws.current());
         let id = index.checked_sub(1).and_then(|i| ids.get(i))?;
         self.panes.get(id).map(|p| p.screen().contents())
+    }
+
+    /// The status bar text of the last frame returned by `render`.
+    pub fn status_text(&self) -> Option<String> {
+        let f = self.prev.as_ref()?;
+        let y = f.h.checked_sub(1)?;
+        Some(
+            (0..f.w)
+                .filter_map(|x| f.get(x, y))
+                .map(|c| c.text.as_str())
+                .collect(),
+        )
     }
 
     /// The last frame returned by `render`.
@@ -442,10 +454,11 @@ impl App {
             .focused()
             .and_then(|f| ids.iter().position(|i| *i == f))
             .map_or(0, |p| p + 1);
-        let hint = match (&self.notice, self.modal.mode()) {
-            (Some(n), _) => n.clone(),
-            (None, Mode::Terminal) => "Ctrl+B then Esc: window mode".to_string(),
-            (None, Mode::Window) => "n new  x close  tab next  i terminal  q quit".to_string(),
+        let hint = match (&self.notice, self.modal.prefix_armed(), self.modal.mode()) {
+            (Some(n), _, _) => n.clone(),
+            (None, true, _) => HINT_PREFIX.to_string(),
+            (None, false, Mode::Terminal) => HINT_TERMINAL.to_string(),
+            (None, false, Mode::Window) => HINT_WINDOW.to_string(),
         };
         let line = format!(
             " {mode} | ws {}/{} | pane {index}/{} | {hint}",

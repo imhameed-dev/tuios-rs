@@ -149,3 +149,91 @@ fn key_log_records_the_tab_decision_and_hides_shell_input() {
         "typed shell input must not be logged: {log}"
     );
 }
+
+#[test]
+fn prefix_tab_switches_focus_without_entering_window_mode() {
+    let mut s = two_panes();
+    s.send("\x02\t"); // Ctrl+B, Tab
+    s.wait_for("pane 1/2");
+    s.wait_until("cursor in the left pane", cursor_in_left);
+    assert!(s.text().contains("TERMINAL"), "still Terminal mode");
+    s.send("echo left_$((20+22))\r");
+    s.wait_for("left_42");
+    assert!(s.cursor().1 < LEFT_BELOW, "typing stayed in the left pane");
+    s.send("\x02\t");
+    s.wait_for("pane 2/2");
+    s.wait_until("cursor in the right pane", cursor_in_right);
+    s.send("echo right_$((20+22))\r");
+    s.wait_for("right_42");
+}
+
+#[test]
+fn rapid_prefix_tab_burst_ends_on_the_right_pane() {
+    let mut s = two_panes();
+    // Five Ctrl+B Tab pairs in one write: 2 -> 1 -> 2 -> 1 -> 2 -> 1.
+    s.send("\x02\t\x02\t\x02\t\x02\t\x02\t");
+    s.wait_for("pane 1/2");
+    s.wait_until("cursor in the left pane", cursor_in_left);
+    // Six more: back to where it started, after an even number of switches.
+    s.send("\x02\t\x02\t\x02\t\x02\t\x02\t\x02\t");
+    s.wait_for("pane 1/2");
+    s.settle();
+    s.send("\x02\t");
+    s.wait_for("pane 2/2");
+    s.wait_until("cursor in the right pane", cursor_in_right);
+    s.send("echo burst_$((20+22))\r");
+    s.wait_for("burst_42");
+}
+
+#[test]
+fn rapid_window_mode_tab_presses_each_switch_once() {
+    let mut s = two_panes();
+    s.window_mode();
+    s.settle();
+    s.send("\t\t\t"); // three switches: 2 -> 1 -> 2 -> 1
+    s.wait_for("pane 1/2");
+    s.settle();
+    assert!(s.text().contains("WINDOW"));
+    s.send("\x1b[Z\x1b[Z"); // two back: 1 -> 2 -> 1
+    s.settle();
+    s.wait_for("pane 1/2");
+    s.send("\x1b[Z");
+    s.wait_for("pane 2/2");
+}
+
+#[test]
+fn prefix_keys_do_not_leak_into_the_shell() {
+    let mut s = two_panes();
+    s.send("cat -A\r");
+    s.settle();
+    // Away and back with the prefix, plus a new pane and a close.
+    s.send("\x02\t\x02\t");
+    s.wait_for("pane 2/2");
+    s.send("\x02c");
+    s.wait_for("pane 3/3");
+    s.send("\x02x");
+    s.wait_for("pane 2/2");
+    s.settle();
+    if cursor_in_left(&s) {
+        s.send("\x02\t"); // focus fell back to the left pane; cat runs on the right
+        s.wait_until("cursor in the right pane", cursor_in_right);
+    }
+    s.send("Z\r");
+    s.wait_for("Z$");
+    let text = s.text();
+    assert!(!text.contains("^B"), "Ctrl+B reached the shell:\n{text}");
+    assert!(!text.contains("^I"), "Tab reached the shell:\n{text}");
+    s.send("\x04");
+}
+
+#[test]
+fn status_bar_explains_each_mode() {
+    let mut s = Session::start(24, 80);
+    s.wait_for("Ctrl+B: c new, Tab next, Esc window");
+    s.send("\x02");
+    s.wait_for("PREFIX");
+    s.wait_for("c new  Tab next  p prev  x close  Esc window");
+    s.send("\x1b");
+    s.wait_for("WINDOW");
+    s.wait_for("Tab next  n new  x close  i shell  q quit");
+}

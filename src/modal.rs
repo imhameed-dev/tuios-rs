@@ -7,6 +7,14 @@
 
 use crate::input::{Key, KeyCode, Mods};
 
+/// Status-bar hints for each state. The bar starts with
+/// ` MODE | ws N/9 | pane N/M | ` (at most 31 columns), so each hint stays
+/// within 47 columns to fit an 80-column terminal.
+pub const HINT_TERMINAL: &str = "Ctrl+B: c new, Tab next, Esc window";
+pub const HINT_PREFIX: &str = "c new  Tab next  p prev  x close  Esc window";
+pub const HINT_WINDOW: &str = "Tab next  n new  x close  i shell  q quit";
+pub const HINT_MAX_COLS: usize = 47;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Keys go to the focused pane.
@@ -383,6 +391,80 @@ mod tests {
             );
             assert_eq!(m.mode(), Mode::Window);
         }
+    }
+
+    #[test]
+    fn prefix_tab_switches_focus_without_entering_window_mode() {
+        let mut m = modal();
+        for _ in 0..4 {
+            m.handle(PREFIX);
+            assert_eq!(
+                m.handle(Key::plain(KeyCode::Tab)),
+                Outcome::Run(Command::FocusNext)
+            );
+            assert_eq!(m.mode(), Mode::Terminal);
+            assert!(!m.prefix_armed());
+            m.handle(PREFIX);
+            assert_eq!(
+                m.handle(Key::plain(KeyCode::BackTab)),
+                Outcome::Run(Command::FocusPrev)
+            );
+            assert_eq!(m.mode(), Mode::Terminal);
+        }
+        // Plain keys afterwards still go to the pane.
+        assert_eq!(m.handle(Key::ch('a')), Outcome::Forward(Key::ch('a')));
+    }
+
+    #[test]
+    fn rapid_prefix_sequences_are_each_handled() {
+        let mut m = modal();
+        let seq = [
+            (Key::plain(KeyCode::Tab), Outcome::Run(Command::FocusNext)),
+            (Key::ch('c'), Outcome::Run(Command::NewPane)),
+            (Key::ch('n'), Outcome::Run(Command::FocusNext)),
+            (Key::plain(KeyCode::Tab), Outcome::Run(Command::FocusNext)),
+        ];
+        for (k, want) in seq {
+            assert_eq!(m.handle(PREFIX), Outcome::Ignore);
+            assert_eq!(m.handle(k), want);
+        }
+    }
+
+    #[test]
+    fn no_prefix_or_window_key_is_forwarded_to_the_shell() {
+        // Terminal mode, prefix armed: nothing is forwarded except Ctrl+B Ctrl+B.
+        for code in [
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Esc,
+            KeyCode::Char('c'),
+            KeyCode::Char('n'),
+            KeyCode::Char('z'),
+        ] {
+            let mut m = modal();
+            m.handle(PREFIX);
+            assert!(
+                !matches!(m.handle(Key::plain(code)), Outcome::Forward(_)),
+                "{code:?}"
+            );
+        }
+        // Window mode forwards nothing at all.
+        let mut w = modal();
+        w.enter_window_mode();
+        for c in "nwxiqr=z123".chars() {
+            assert!(!matches!(w.handle(Key::ch(c)), Outcome::Forward(_)), "{c}");
+            w.enter_window_mode();
+        }
+    }
+
+    #[test]
+    fn hints_fit_in_80_columns_and_name_the_key_actions() {
+        for h in [HINT_TERMINAL, HINT_PREFIX, HINT_WINDOW] {
+            assert!(h.chars().count() <= HINT_MAX_COLS, "{h}");
+        }
+        assert!(HINT_TERMINAL.contains("Ctrl+B") && HINT_TERMINAL.contains("Tab"));
+        assert!(HINT_PREFIX.contains("Esc window") && HINT_PREFIX.contains("Tab next"));
+        assert!(HINT_WINDOW.contains("q quit") && HINT_WINDOW.contains("i shell"));
     }
 
     #[test]
