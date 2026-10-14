@@ -183,6 +183,9 @@ impl App {
         if self.modal.mode() != Mode::Terminal {
             return;
         }
+        // A paste after Ctrl+B ends the pending prefix, so the next key
+        // typed goes to the shell instead of running as a command.
+        self.modal.cancel_prefix();
         if let Some(p) = self.focused_pane() {
             let bytes = paste_bytes(text, p.bracketed_paste());
             p.write(&bytes);

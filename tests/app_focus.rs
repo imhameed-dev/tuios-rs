@@ -208,3 +208,20 @@ fn status_line_text_follows_the_mode() {
         "{t}"
     );
 }
+
+#[test]
+fn a_paste_after_the_prefix_ends_the_prefix() {
+    let mut h = Harness::new();
+    h.key(Key::ctrl('b'));
+    h.app.handle(AppEvent::Input(InputEvent::Paste(
+        "echo pp_$((20+22))\n".to_string(),
+    )));
+    assert!(h.wait_pane(2, "pp_42"), "{:?}", h.app.pane_text(2));
+    // 'c' is now plain text for the shell, not "new pane".
+    h.key(Key::ch('c'));
+    assert_eq!(h.app.pane_count(), 2);
+    assert_eq!(h.app.mode(), Mode::Terminal);
+    h.app.render();
+    let t = h.app.status_text().unwrap();
+    assert!(t.contains("TERMINAL") && !t.contains("PREFIX"), "{t}");
+}

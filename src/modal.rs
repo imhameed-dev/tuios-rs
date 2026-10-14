@@ -77,6 +77,12 @@ impl Modal {
         self.prefix_armed = false;
     }
 
+    /// Drop a pending prefix (the next key is an ordinary key again). Used
+    /// when something other than a key, such as a paste, arrives after it.
+    pub fn cancel_prefix(&mut self) {
+        self.prefix_armed = false;
+    }
+
     pub fn handle(&mut self, key: Key) -> Outcome {
         // Alt+1..9 switches workspace in both modes, like upstream.
         if let Some(ws) = alt_digit(key) {
@@ -455,6 +461,15 @@ mod tests {
             assert!(!matches!(w.handle(Key::ch(c)), Outcome::Forward(_)), "{c}");
             w.enter_window_mode();
         }
+    }
+
+    #[test]
+    fn cancel_prefix_makes_the_next_key_an_ordinary_key() {
+        let mut m = modal();
+        m.handle(PREFIX);
+        m.cancel_prefix();
+        assert!(!m.prefix_armed());
+        assert_eq!(m.handle(Key::ch('c')), Outcome::Forward(Key::ch('c')));
     }
 
     #[test]

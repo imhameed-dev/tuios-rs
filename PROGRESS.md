@@ -49,3 +49,9 @@
 - Tests added: 5 modal unit tests, 1 render unit test, 4 in-process tests (`tests/app_focus.rs`: both directions, typing reaches the focused shell only, dim follows focus, Esc+Tab coalescing), 7 PTY tests (`tests/focus.rs`). `focus` now also runs against the packaged binary inside `archlinux:latest` in the release workflow.
 - CI for commit 4c0f837 (runs 38389419908 and 38389419980): fmt, clippy `-D warnings`, build and tests pass; 67 unit, 4 app_focus, 16 compat, 5 e2e, 7 focus tests pass on the runner and on Arch.
 - Not verified: the user's own laptop, a real terminal emulator or dwm. The laptop's exact cause is unconfirmed; the Esc+Tab coalescing defect is the one that was reproduced.
+
+## Day 5 (Oct 14): keybinding audit
+- Audited the committed keybindings (`modal.rs`, `app.rs`, `main.rs` help, `docs/INSTALL-ARCH.md`) against the required behavior: Ctrl+B c new pane, Ctrl+B Tab next pane without entering Window mode, Ctrl+B Esc Window mode. All three were already implemented and covered by tests in 6e70662.
+- Bug found by reading the code: a paste after Ctrl+B left the prefix armed, so the next typed key ran as a command (for example `c` opened a pane) instead of reaching the shell. Fixed: a paste now cancels the pending prefix. Unit and in-process regression tests added.
+- Design note (unchanged): Window mode uses plain keys; the Ctrl+B prefix applies in Terminal mode only. Documented.
+- The user's `/tmp/keys.txt` is on the user's laptop and was not available in this workspace, so it was not part of this audit.

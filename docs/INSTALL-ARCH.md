@@ -66,6 +66,8 @@ the shell:
 | i or Enter | back to Terminal mode |
 | q | quit |
 
+In Window mode you do not use Ctrl+B: press the plain keys above. Ctrl+B is only the prefix in Terminal mode.
+
 To quit: Ctrl+B, Esc, then q (or close every shell with `exit`).
 
 ## Troubleshooting
