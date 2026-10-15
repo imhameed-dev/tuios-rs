@@ -6,6 +6,7 @@ pub mod app;
 pub mod diag;
 pub mod event;
 pub mod input;
+pub mod keytest;
 pub mod layout;
 pub mod modal;
 pub mod pane;

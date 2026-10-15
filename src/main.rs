@@ -10,7 +10,9 @@ use tuios_rs::tty::{install_panic_hook, spawn_input_thread, TtyGuard};
 const HELP: &str = "\
 tuios-rs: terminal multiplexer (Rust rewrite of TUIOS, early version)
 
-Usage: tuios-rs [--version | --help]
+Usage: tuios-rs [--version | --help | --check-keys]
+
+--check-keys: a 10-second check of what your terminal sends for Ctrl+B and Esc.
 
 Terminal mode (the default; status bar says TERMINAL): your typing goes to
 the shell in the active pane. The prefix is Ctrl+B:
@@ -46,6 +48,13 @@ fn run() -> io::Result<()> {
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print!("{HELP}");
+        return Ok(());
+    }
+
+    if args.iter().any(|a| a == "--check-keys") {
+        if !tuios_rs::keytest::run()? {
+            std::process::exit(1);
+        }
         return Ok(());
     }
 

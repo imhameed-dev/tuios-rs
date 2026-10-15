@@ -62,3 +62,8 @@
 - **Defect reproduced:** after the prefix, Esc reported with Ctrl or Shift (kitty-style `CSI 27;5u` / `27;2u`, sent by terminals that report modifiers) was treated as an unbound modified key: the prefix was dropped and Window mode was not entered. Fix in `src/modal.rs`: after the prefix, Esc means Window mode whatever modifiers are reported.
 - Not fixable here: xterm modifyOtherKeys Esc (`CSI 27;5;27~`) is dropped by the input library (crossterm), so the app never sees a key; documented in INSTALL-ARCH.md.
 - Whether this is the cause on the laptop is unconfirmed; the terminal emulator is not known.
+
+## Day 6 (Oct 15): Alacritty + dwm report
+- Laptop report: basic pane tests pass; Ctrl+B then Esc still reported as failing in Alacritty under dwm.
+- Code and encodings re-checked: plain Esc, Ctrl/Shift/Alt+Esc, `Ctrl+[`, one-write bursts and held-key repeat all behave correctly against the released binary in a PTY. No Alacritty-specific cause was found, and Alacritty's real key output could not be observed from this workspace.
+- Cause **not identified**. Added `tuios-rs --check-keys`: a two-keypress check that runs the real key conversion and mode logic in the user's own terminal and prints PASS/FAIL with the reason. Tests in `tests/keycheck.rs`.

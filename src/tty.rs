@@ -61,7 +61,9 @@ pub fn install_panic_hook() {
     }));
 }
 
-fn convert_key(k: KeyEvent) -> Option<Key> {
+/// Convert a terminal key event to our key model (`None` for releases and
+/// keys we do not use).
+pub fn convert_key(k: KeyEvent) -> Option<Key> {
     if k.kind == KeyEventKind::Release {
         return None;
     }

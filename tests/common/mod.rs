@@ -83,6 +83,18 @@ impl Session {
     }
 
     pub fn start_with_env(rows: u16, cols: u16, env: &[(&str, &str)]) -> Session {
+        Session::start_args(rows, cols, &[], env, "TERMINAL")
+    }
+
+    /// Start with command-line `args`; `ready` is text that shows the
+    /// program is waiting for input.
+    pub fn start_args(
+        rows: u16,
+        cols: u16,
+        args: &[&str],
+        env: &[(&str, &str)],
+        ready: &str,
+    ) -> Session {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows,
@@ -94,6 +106,9 @@ impl Session {
         let mut cmd = CommandBuilder::new(bin_path());
         cmd.env("TERM", "xterm-256color");
         cmd.env("SHELL", "/bin/sh");
+        for a in args {
+            cmd.arg(a);
+        }
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -122,7 +137,7 @@ impl Session {
         };
         // Typing before the app has switched the tty to raw mode would be
         // handled by the line discipline instead, so wait for the first frame.
-        s.wait_for("TERMINAL");
+        s.wait_for(ready);
         s
     }
 
