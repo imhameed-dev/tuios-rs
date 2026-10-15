@@ -237,3 +237,59 @@ fn status_bar_explains_each_mode() {
     s.wait_for("WINDOW");
     s.wait_for("Tab next  n new  x close  i shell  q quit");
 }
+
+/// Esc encodings a terminal may send for "Esc" while Ctrl or Shift is held
+/// (terminals that report modifiers), plus the plain byte and Alt+Esc.
+const ESC_ENCODINGS: [(&str, &str); 5] = [
+    ("plain ESC", "\x1b"),
+    ("Ctrl+Esc as CSI 27;5u", "\x1b[27;5u"),
+    ("Shift+Esc as CSI 27;2u", "\x1b[27;2u"),
+    ("Esc as CSI 27u", "\x1b[27u"),
+    ("Alt+Esc as ESC ESC", "\x1b\x1b"),
+];
+
+#[test]
+fn ctrl_b_esc_enters_window_mode_and_window_keys_need_no_prefix() {
+    for (name, esc) in ESC_ENCODINGS {
+        let mut s = Session::start(24, 80);
+        s.send("\x02");
+        s.settle();
+        s.send(esc);
+        s.wait_for("WINDOW");
+        assert!(!s.text().contains("PREFIX"), "{name}: {}", s.text());
+        // `n` makes a pane with no prefix, and the status says so.
+        s.send("n");
+        s.wait_for("pane 2/2");
+        assert!(s.text().contains("WINDOW"), "{name}: still Window mode");
+        // `i` returns to Terminal mode, and typing reaches the shell again.
+        s.send("i");
+        s.wait_for("TERMINAL");
+        s.send("echo back_$((20+22))\r");
+        s.wait_for("back_42");
+    }
+}
+
+#[test]
+fn ctrl_b_and_esc_in_one_write_enters_window_mode() {
+    let mut s = Session::start(24, 80);
+    s.send("\x02\x1b");
+    s.wait_for("WINDOW");
+    s.send("n");
+    s.wait_for("pane 2/2");
+}
+
+#[test]
+fn esc_in_terminal_mode_reaches_the_shell_and_focus_still_switches() {
+    let mut s = two_panes();
+    s.send("cat -A\r");
+    s.settle();
+    s.send("\x1b"); // a lone Esc, no prefix
+    s.settle();
+    s.send("Q\r");
+    s.wait_for("^[Q$");
+    assert!(s.text().contains("TERMINAL"), "Esc must not change mode");
+    s.send("\x04");
+    s.send("\x02\t");
+    s.wait_for("pane 1/2");
+    s.wait_until("cursor in the left pane", cursor_in_left);
+}

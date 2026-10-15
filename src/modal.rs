@@ -108,6 +108,15 @@ impl Modal {
             // Prefix twice sends the prefix key itself.
             return Outcome::Forward(key);
         }
+        // Deviation: upstream's Esc alone leaves terminal mode, which would
+        // steal Esc from vim; here it needs the prefix first. Esc after the
+        // prefix means Window mode whatever modifiers the terminal reports
+        // on it (terminals that report modifiers send Ctrl+Esc as
+        // `CSI 27;5u`, which used to be swallowed as an unbound key).
+        if key.code == KeyCode::Esc {
+            self.mode = Mode::Window;
+            return Outcome::Ignore;
+        }
         // Terminals send Esc as a lone ESC byte, and when the next key
         // arrives in the same read (a quick Ctrl+B, Esc, Tab, or a loaded
         // machine) the input layer reports "Esc then Tab" as Alt+Tab.
@@ -127,12 +136,6 @@ impl Modal {
             return Outcome::Ignore;
         }
         match key.code {
-            // Deviation: upstream's Esc alone leaves terminal mode, which
-            // would steal Esc from vim; here it needs the prefix first.
-            KeyCode::Esc => {
-                self.mode = Mode::Window;
-                Outcome::Ignore
-            }
             KeyCode::Char('c') => Outcome::Run(Command::NewPane),
             KeyCode::Char('x') => Outcome::Run(Command::ClosePane),
             KeyCode::Char('n') | KeyCode::Tab => Outcome::Run(Command::FocusNext),
@@ -461,6 +464,48 @@ mod tests {
             assert!(!matches!(w.handle(Key::ch(c)), Outcome::Forward(_)), "{c}");
             w.enter_window_mode();
         }
+    }
+
+    #[test]
+    fn prefix_then_esc_enters_window_mode_whatever_modifiers_are_reported() {
+        for mods in [
+            Mods::NONE,
+            Mods {
+                ctrl: true,
+                ..Mods::NONE
+            },
+            Mods {
+                shift: true,
+                ..Mods::NONE
+            },
+            Mods {
+                alt: true,
+                ..Mods::NONE
+            },
+            Mods {
+                ctrl: true,
+                shift: true,
+                alt: false,
+            },
+        ] {
+            let mut m = modal();
+            m.handle(PREFIX);
+            assert_eq!(m.handle(Key::new(KeyCode::Esc, mods)), Outcome::Ignore);
+            assert_eq!(m.mode(), Mode::Window, "{mods:?}");
+            assert!(!m.prefix_armed());
+            // Window-mode keys now work without the prefix.
+            assert_eq!(m.handle(Key::ch('n')), Outcome::Run(Command::NewPane));
+            assert_eq!(m.handle(Key::ch('i')), Outcome::Ignore);
+            assert_eq!(m.mode(), Mode::Terminal);
+        }
+    }
+
+    #[test]
+    fn esc_without_the_prefix_still_goes_to_the_shell() {
+        let mut m = modal();
+        let esc = Key::plain(KeyCode::Esc);
+        assert_eq!(m.handle(esc), Outcome::Forward(esc));
+        assert_eq!(m.mode(), Mode::Terminal);
     }
 
     #[test]

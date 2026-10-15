@@ -55,3 +55,10 @@
 - Bug found by reading the code: a paste after Ctrl+B left the prefix armed, so the next typed key ran as a command (for example `c` opened a pane) instead of reaching the shell. Fixed: a paste now cancels the pending prefix. Unit and in-process regression tests added.
 - Design note (unchanged): Window mode uses plain keys; the Ctrl+B prefix applies in Terminal mode only. Documented.
 - The user's `/tmp/keys.txt` is on the user's laptop and was not available in this workspace, so it was not part of this audit.
+
+## Day 5/6 (Oct 14-15): Ctrl+B Esc report
+- Report: on the laptop, Ctrl+B then Esc did not enter Window mode; Ctrl+B c, Ctrl+B Tab and per-pane typing passed.
+- Reproduction against the downloaded release (dev-latest, f5e3aef) in a PTY, with `TUIOS_KEYLOG` for the app's decisions: plain Esc worked at every timing tried (300 ms, 40 ms, 5 ms gaps, one write, Ctrl+[), with real bash and sh, in the full manual sequence (create pane, switch, type, Esc, `n`, `i`). **The reported failure did not reproduce with a plain Esc byte.**
+- **Defect reproduced:** after the prefix, Esc reported with Ctrl or Shift (kitty-style `CSI 27;5u` / `27;2u`, sent by terminals that report modifiers) was treated as an unbound modified key: the prefix was dropped and Window mode was not entered. Fix in `src/modal.rs`: after the prefix, Esc means Window mode whatever modifiers are reported.
+- Not fixable here: xterm modifyOtherKeys Esc (`CSI 27;5;27~`) is dropped by the input library (crossterm), so the app never sees a key; documented in INSTALL-ARCH.md.
+- Whether this is the cause on the laptop is unconfirmed; the terminal emulator is not known.

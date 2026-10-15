@@ -225,3 +225,20 @@ fn a_paste_after_the_prefix_ends_the_prefix() {
     let t = h.app.status_text().unwrap();
     assert!(t.contains("TERMINAL") && !t.contains("PREFIX"), "{t}");
 }
+
+#[test]
+fn prefix_then_ctrl_esc_shows_window_in_the_status_bar() {
+    let mut h = Harness::new();
+    h.key(Key::ctrl('b'));
+    h.key(Key::new(
+        KeyCode::Esc,
+        Mods {
+            ctrl: true,
+            ..Mods::NONE
+        },
+    ));
+    assert_eq!(h.app.mode(), Mode::Window);
+    h.app.render();
+    let t = h.app.status_text().unwrap();
+    assert!(t.contains("WINDOW") && !t.contains("PREFIX"), "{t}");
+}
