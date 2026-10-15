@@ -131,6 +131,10 @@ jobs:
   publish:
     needs: [build, arch-smoke]
     runs-on: ubuntu-latest
+    # Two pushes close together must not publish at the same time.
+    concurrency:
+      group: publish-dev-latest
+      cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -153,4 +157,17 @@ jobs:
           - Build and test run: ${run_url}
           - Built on ubuntu-latest; this exact binary passed the end-to-end, compatibility and pane-focus tests inside an archlinux:latest container before being published.
           - Install notes: README.md inside the tarball."
+          # A release left as a draft has no public download link, so make sure
+          # it is published, then prove it: download it anonymously and check
+          # the checksum.
+          gh release edit dev-latest --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          state=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev-latest" --jq '"draft=\(.draft) target=\(.target_commitish)"')
+          echo "release state: $state"
+          test "$state" = "draft=false target=$sha"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/dev-latest"
+          mkdir -p verify && cd verify
+          curl -fsSL -o t.tgz "$base/tuios-rs-linux-x86_64.tar.gz"
+          curl -fsSL -o t.sha "$base/tuios-rs-linux-x86_64.tar.gz.sha256"
+          test "$(cut -c1-64 t.sha)" = "$(sha256sum t.tgz | cut -c1-64)"
+          echo "::notice title=release-verified::anonymous download matches checksum for ${sha}"
           echo "::notice title=release-url::https://github.com/${GITHUB_REPOSITORY}/releases/download/dev-latest/tuios-rs-linux-x86_64.tar.gz"
