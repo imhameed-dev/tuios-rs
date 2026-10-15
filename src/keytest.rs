@@ -4,6 +4,8 @@
 //! would do in this terminal.
 
 use std::io::{self, Write};
+use std::sync::mpsc::{self, Receiver};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyEvent};
@@ -46,18 +48,25 @@ fn wait_time() -> Duration {
     Duration::from_millis(ms)
 }
 
-/// The next key press, or `None` if nothing arrives in time.
-fn next_key(wait: Duration) -> io::Result<Option<(KeyEvent, Key)>> {
+/// The next key press, or `None` if nothing arrives in time. Events are
+/// read on a helper thread: for a byte sequence the input library cannot
+/// decode, `poll` can say "ready" and `read` then blocks, which would
+/// defeat the timeout.
+fn next_key(events: &Receiver<Event>, wait: Duration) -> Option<(KeyEvent, Key)> {
     let end = Instant::now() + wait;
     loop {
         let left = end.saturating_duration_since(Instant::now());
-        if left.is_zero() || !event::poll(left)? {
-            return Ok(None);
+        if left.is_zero() {
+            return None;
         }
-        if let Event::Key(k) = event::read()? {
-            if let Some(key) = convert_key(k) {
-                return Ok(Some((k, key)));
+        match events.recv_timeout(left) {
+            Ok(Event::Key(k)) => {
+                if let Some(key) = convert_key(k) {
+                    return Some((k, key));
+                }
             }
+            Ok(_) => {}
+            Err(_) => return None,
         }
     }
 }
@@ -68,13 +77,21 @@ pub fn run() -> io::Result<bool> {
     let wait = wait_time();
     let secs = wait.as_secs().max(1);
     let mut modal = Modal::new(Key::ctrl('b'));
+    let (tx, events) = mpsc::channel();
+    thread::spawn(move || {
+        while let Ok(ev) = event::read() {
+            if tx.send(ev).is_err() {
+                break;
+            }
+        }
+    });
 
     say("TUIOS-RS key check: two key presses, then it tells you the result.");
     say("");
     say(&format!(
         "Step 1: hold Ctrl and tap B. (waiting up to {secs} seconds)"
     ));
-    let Some((event, key)) = next_key(wait)? else {
+    let Some((event, key)) = next_key(&events, wait) else {
         say("  Nothing arrived. RESULT: FAIL - this terminal sent nothing for Ctrl+B.");
         return Ok(false);
     };
@@ -90,7 +107,7 @@ pub fn run() -> io::Result<bool> {
     say(&format!(
         "Step 2: now tap Esc (just Esc). (waiting up to {secs} seconds)"
     ));
-    let Some((event, key)) = next_key(wait)? else {
+    let Some((event, key)) = next_key(&events, wait) else {
         say("  Nothing arrived. RESULT: FAIL - the program never received the Esc key.");
         say("  (Something outside TUIOS-RS, such as the terminal or window manager, kept it,");
         say("   or the terminal sent an encoding the input library cannot read.)");
