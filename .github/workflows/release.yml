@@ -47,7 +47,7 @@ jobs:
           set -o pipefail
           cargo test --release --no-run --message-format=json > ci-logs/test-artifacts.json
           mkdir -p bundle
-          for t in e2e compat focus perf; do
+          for t in e2e compat focus lifecycle perf; do
             exe=$(jq -r --arg t "$t" 'select(.reason=="compiler-artifact" and .target.name==$t and (.target.kind|index("test")) and .executable!=null) | .executable' ci-logs/test-artifacts.json | tail -1)
             test -n "$exe"
             cp "$exe" "bundle/$t"
@@ -118,11 +118,12 @@ jobs:
           export TUIOS_BIN="$PWD/bundle/tuios-rs-linux-x86_64/tuios-rs"
           export TUIOS_REQUIRE_TOOLS=1 TERM=xterm-256color
           "$TUIOS_BIN" --version 2>&1 | tee ci-logs/arch-version.log
-          chmod +x bundle/e2e bundle/compat bundle/focus "$TUIOS_BIN"
+          chmod +x bundle/e2e bundle/compat bundle/focus bundle/lifecycle "$TUIOS_BIN"
           rc=0
           ./bundle/e2e 2>&1 | tee ci-logs/arch-e2e.log || rc=1
           ./bundle/compat 2>&1 | tee ci-logs/arch-compat.log || rc=1
           ./bundle/focus 2>&1 | tee ci-logs/arch-focus.log || rc=1
+          ./bundle/lifecycle 2>&1 | tee ci-logs/arch-lifecycle.log || rc=1
           exit $rc
       - name: Publish results as annotations
         if: always()
@@ -155,7 +156,7 @@ jobs:
 
           - Commit: ${sha}
           - Build and test run: ${run_url}
-          - Built on ubuntu-latest; this exact binary passed the end-to-end, compatibility and pane-focus tests inside an archlinux:latest container before being published.
+          - Built on ubuntu-latest; this exact binary passed the end-to-end, compatibility, pane-focus and lifecycle (resize, signals, panic, cleanup) tests inside an archlinux:latest container before being published.
           - Install notes: README.md inside the tarball."
           # A release left as a draft has no public download link, so make sure
           # it is published, then prove it: download it anonymously and check
