@@ -43,7 +43,9 @@ pub enum Outcome {
     /// Send this key to the focused pane.
     Forward(Key),
     Run(Command),
-    /// Handled internally (mode change, prefix armed) or unbound.
+    /// Nothing for the caller to do. This is also what a mode change or an
+    /// armed prefix returns: the change happens inside `Modal`, so check
+    /// `Modal::mode()` / `prefix_armed()` rather than expecting a command.
     Ignore,
 }
 

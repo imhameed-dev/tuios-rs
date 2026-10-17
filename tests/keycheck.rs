@@ -32,6 +32,12 @@ fn check_keys_passes_for_every_esc_encoding_we_support() {
         s.wait_for("RESULT:");
         let t = s.text();
         assert!(t.contains("RESULT: PASS"), "{name}:\n{t}");
+        // The verdict comes from the real app: its mode and its status bar.
+        assert!(t.contains("mode: Terminal -> Window"), "{name}:\n{t}");
+        assert!(
+            t.contains("PREFIX |") && t.contains("WINDOW |"),
+            "{name}:\n{t}"
+        );
     }
 }
 

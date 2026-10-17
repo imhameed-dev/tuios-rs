@@ -242,3 +242,31 @@ fn prefix_then_ctrl_esc_shows_window_in_the_status_bar() {
     let t = h.app.status_text().unwrap();
     assert!(t.contains("WINDOW") && !t.contains("PREFIX"), "{t}");
 }
+
+#[test]
+fn ctrl_b_then_esc_moves_terminal_to_window_mode_and_window_keys_need_no_prefix() {
+    let mut h = Harness::new();
+    h.app.render();
+    assert_eq!(h.app.mode(), Mode::Terminal);
+    assert!(h.app.status_text().unwrap().contains("TERMINAL |"));
+
+    h.key(Key::ctrl('b'));
+    h.app.render();
+    assert_eq!(h.app.mode(), Mode::Terminal, "prefix alone changes nothing");
+    assert!(h.app.status_text().unwrap().contains("PREFIX |"));
+
+    h.key(Key::plain(KeyCode::Esc));
+    h.app.render();
+    assert_eq!(h.app.mode(), Mode::Window);
+    let t = h.app.status_text().unwrap();
+    assert!(t.contains("WINDOW |") && !t.contains("PREFIX |"), "{t}");
+
+    // Window-mode keys work with no prefix: `n` makes a pane, `i` returns.
+    h.key(Key::ch('n'));
+    assert_eq!(h.app.pane_count(), 3);
+    assert_eq!(h.app.mode(), Mode::Window);
+    h.key(Key::ch('i'));
+    h.app.render();
+    assert_eq!(h.app.mode(), Mode::Terminal);
+    assert!(h.app.status_text().unwrap().contains("TERMINAL |"));
+}

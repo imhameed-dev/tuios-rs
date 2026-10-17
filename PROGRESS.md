@@ -67,3 +67,10 @@
 - Laptop report: basic pane tests pass; Ctrl+B then Esc still reported as failing in Alacritty under dwm.
 - Code and encodings re-checked: plain Esc, Ctrl/Shift/Alt+Esc, `Ctrl+[`, one-write bursts and held-key repeat all behave correctly against the released binary in a PTY. No Alacritty-specific cause was found, and Alacritty's real key output could not be observed from this workspace.
 - Cause **not identified**. Added `tuios-rs --check-keys`: a two-keypress check that runs the real key conversion and mode logic in the user's own terminal and prints PASS/FAIL with the reason. Tests in `tests/keycheck.rs`.
+
+## Day 7 (Oct 17): --check-keys output looked contradictory
+- Laptop run of `--check-keys` (Alacritty + dwm): Ctrl+B and Esc both received and recognised, then `TUIOS-RS decides: Ignore`, then `RESULT: PASS`.
+- Cause of the confusion: `Outcome::Ignore` means "nothing for the caller to do". A mode change returns `Ignore` because the change happens inside `Modal`. Not a bug in the key handling, but the diagnostic printed it misleadingly and only exercised `Modal`, not the app or status bar.
+- Fix: `--check-keys` now feeds the received keys to the real `App` (one real pane) and reports the app's own mode change and status bar (`mode: Terminal -> Window`, status bar text). The Ignore line is gone; `Outcome::Ignore` is documented.
+- Regression test `ctrl_b_then_esc_moves_terminal_to_window_mode_and_window_keys_need_no_prefix` (app level) and stronger `tests/keycheck.rs`.
+- The laptop's PASS means the key path works in that terminal; why the earlier manual test looked like a failure is still unexplained (see FEATURES/INSTALL notes).
