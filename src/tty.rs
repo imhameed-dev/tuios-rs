@@ -3,6 +3,7 @@
 use std::io::{self, Write};
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time::Duration;
 
 use crossterm::cursor::Show;
 use crossterm::event::{
@@ -104,24 +105,59 @@ pub fn convert_key(k: KeyEvent) -> Option<Key> {
 
 /// Read terminal events on a background thread and forward them to `tx`.
 pub fn spawn_input_thread(tx: Sender<AppEvent>) {
-    thread::spawn(move || loop {
-        let ev = match event::read() {
-            Ok(ev) => ev,
-            Err(_) => {
-                let _ = tx.send(AppEvent::Input(InputEvent::Eof));
-                break;
+    thread::spawn(move || {
+        // crossterm starts listening for resize signals only on its first
+        // poll, so a resize in the first moments after launch would be
+        // lost. Start listening now, then read the size once: anything that
+        // changed before this point is picked up here.
+        let _ = event::poll(Duration::ZERO);
+        if let Ok((w, h)) = crossterm::terminal::size() {
+            if tx.send(AppEvent::Input(InputEvent::Resize(w, h))).is_err() {
+                return;
             }
-        };
-        let mapped = match ev {
-            Event::Key(k) => convert_key(k).map(InputEvent::Key),
-            Event::Paste(s) => Some(InputEvent::Paste(s)),
-            Event::Resize(w, h) => Some(InputEvent::Resize(w, h)),
-            _ => None,
-        };
-        if let Some(m) = mapped {
-            if tx.send(AppEvent::Input(m)).is_err() {
-                break;
+        }
+        loop {
+            let ev = match event::read() {
+                Ok(ev) => ev,
+                Err(_) => {
+                    let _ = tx.send(AppEvent::Input(InputEvent::Eof));
+                    break;
+                }
+            };
+            let mapped = match ev {
+                Event::Key(k) => convert_key(k).map(InputEvent::Key),
+                Event::Paste(s) => Some(InputEvent::Paste(s)),
+                Event::Resize(w, h) => Some(InputEvent::Resize(w, h)),
+                _ => None,
+            };
+            if let Some(m) = mapped {
+                if tx.send(AppEvent::Input(m)).is_err() {
+                    break;
+                }
             }
         }
     });
+}
+
+/// Turn SIGTERM, SIGHUP and SIGINT into a normal quit, so the terminal is
+/// restored and the shells are stopped, instead of the process dying with
+/// the screen still in raw mode. A second signal while quitting restores the
+/// terminal at once and exits.
+pub fn spawn_signal_thread(tx: Sender<AppEvent>) -> io::Result<()> {
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+    let mut signals = Signals::new([SIGTERM, SIGHUP, SIGINT])?;
+    thread::spawn(move || {
+        let mut seen = 0u32;
+        for _ in signals.forever() {
+            seen += 1;
+            if seen == 1 {
+                let _ = tx.send(AppEvent::Input(InputEvent::Eof));
+            } else {
+                restore();
+                std::process::exit(1);
+            }
+        }
+    });
+    Ok(())
 }

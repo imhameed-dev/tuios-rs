@@ -412,7 +412,9 @@ name = "tuios-rs"
 version = "0.0.0"
 dependencies = [
  "crossterm",
+ "nix",
  "portable-pty",
+ "signal-hook",
  "vt100",
 ]
 

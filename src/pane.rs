@@ -145,8 +145,48 @@ impl Pane {
     }
 }
 
+/// Send SIGHUP to every process in the shell's session, the way a closing
+/// terminal does. The shell is the session leader (the PTY layer makes it
+/// one), so this reaches background jobs that a plain shell kill would
+/// leave running. Programs started with `nohup` ignore SIGHUP and carry on,
+/// as their owner intended.
+fn hangup_session(session: u32) {
+    let Ok(dir) = std::fs::read_dir("/proc") else {
+        return;
+    };
+    for entry in dir.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            continue;
+        };
+        // After the command name (in parentheses, and it may contain spaces)
+        // the fields are: state, parent, process group, session.
+        let sid = stat
+            .rsplit_once(") ")
+            .and_then(|(_, rest)| rest.split_whitespace().nth(3))
+            .and_then(|v| v.parse::<u32>().ok());
+        if sid == Some(session) {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(pid),
+                nix::sys::signal::Signal::SIGHUP,
+            );
+        }
+    }
+}
+
 impl Drop for Pane {
     fn drop(&mut self) {
+        if let Some(pid) = self.child.process_id() {
+            hangup_session(pid);
+        }
         let _ = self.child.kill();
+        // Reap the shell so closing panes does not pile up zombies.
+        let _ = self.child.wait();
     }
 }

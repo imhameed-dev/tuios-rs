@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::sync::mpsc;
 
 use tuios_rs::app::App;
-use tuios_rs::tty::{install_panic_hook, spawn_input_thread, TtyGuard};
+use tuios_rs::tty::{install_panic_hook, spawn_input_thread, spawn_signal_thread, TtyGuard};
 
 const HELP: &str = "\
 tuios-rs: terminal multiplexer (Rust rewrite of TUIOS, early version)
@@ -63,6 +63,7 @@ fn run() -> io::Result<()> {
     let (cols, rows) = crossterm::terminal::size()?;
     let (tx, rx) = mpsc::channel();
     spawn_input_thread(tx.clone());
+    spawn_signal_thread(tx.clone())?;
     let shell = std::env::var("SHELL")
         .ok()
         .filter(|s| !s.is_empty())
@@ -71,6 +72,11 @@ fn run() -> io::Result<()> {
     let mut app = App::new(cols, rows, shell, tx);
     app.open_pane();
     flush(&mut app)?;
+    // Test hook, used by the test suite to check that a panic puts the
+    // terminal back. Does nothing unless the variable is set.
+    if std::env::var_os("TUIOS_TEST_PANIC").is_some() {
+        panic!("TUIOS_TEST_PANIC is set: deliberate panic");
+    }
     while !app.quit {
         let Ok(ev) = rx.recv() else { break };
         app.handle(ev);

@@ -68,6 +68,8 @@ pub fn number_after(text: &str, prefix: &str) -> Option<u32> {
     None
 }
 
+const WRAP_SCRIPT: &str = r#""$0"; echo "EXIT_CODE_$?"; echo "TTY: $(stty -a | tr ' ;' '\n\n' | grep -E '^-?(isig|icanon|echo)$' | tr '\n' ' ')"; echo AFTER_DONE"#;
+
 pub struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -95,14 +97,6 @@ impl Session {
         env: &[(&str, &str)],
         ready: &str,
     ) -> Session {
-        let pair = native_pty_system()
-            .openpty(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .expect("open pty");
         let mut cmd = CommandBuilder::new(bin_path());
         cmd.env("TERM", "xterm-256color");
         cmd.env("SHELL", "/bin/sh");
@@ -112,6 +106,37 @@ impl Session {
         for (k, v) in env {
             cmd.env(k, v);
         }
+        Session::launch(rows, cols, cmd, ready)
+    }
+
+    /// Run the binary under `sh -c`, so that what the terminal looks like
+    /// after the program ends can be checked: the script prints the exit
+    /// code (`EXIT_CODE_n`), whether the terminal is back in normal
+    /// (cooked) mode (`TTY: isig icanon echo`; a leftover raw mode shows
+    /// `-isig -icanon -echo`) and then `AFTER_DONE`. `ready` is text that
+    /// shows the program is up.
+    pub fn start_wrapped(rows: u16, cols: u16, env: &[(&str, &str)], ready: &str) -> Session {
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c");
+        cmd.arg(WRAP_SCRIPT);
+        cmd.arg(bin_path());
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("SHELL", "/bin/sh");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        Session::launch(rows, cols, cmd, ready)
+    }
+
+    fn launch(rows: u16, cols: u16, cmd: CommandBuilder, ready: &str) -> Session {
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("open pty");
         let child = pair.slave.spawn_command(cmd).expect("spawn tuios-rs");
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().expect("clone reader");
@@ -139,6 +164,35 @@ impl Session {
         // handled by the line discipline instead, so wait for the first frame.
         s.wait_for(ready);
         s
+    }
+
+    /// The program started by `start_wrapped` (a child of the wrapper shell).
+    pub fn app_pid(&self) -> Option<u32> {
+        let wrapper = self.pid();
+        std::fs::read_dir("/proc")
+            .ok()?
+            .flatten()
+            .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+            .find(|pid| {
+                std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .ok()
+                    .and_then(|st| {
+                        let rest = st.rsplit_once(") ")?.1.to_string();
+                        rest.split_whitespace().nth(1)?.parse::<u32>().ok()
+                    })
+                    == Some(wrapper)
+            })
+    }
+
+    /// Send a signal (`TERM`, `HUP`, `INT`) to the program, from outside.
+    pub fn signal_app(&self, sig: &str) {
+        let pid = self.app_pid().expect("the program is running");
+        let status = std::process::Command::new("kill")
+            .arg(format!("-{sig}"))
+            .arg(pid.to_string())
+            .status()
+            .expect("run kill");
+        assert!(status.success(), "kill -{sig} {pid} failed");
     }
 
     pub fn pid(&self) -> u32 {

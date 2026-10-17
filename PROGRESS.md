@@ -74,3 +74,14 @@
 - Fix: `--check-keys` now feeds the received keys to the real `App` (one real pane) and reports the app's own mode change and status bar (`mode: Terminal -> Window`, status bar text). The Ignore line is gone; `Outcome::Ignore` is documented.
 - Regression test `ctrl_b_then_esc_moves_terminal_to_window_mode_and_window_keys_need_no_prefix` (app level) and stronger `tests/keycheck.rs`.
 - The laptop's PASS means the key path works in that terminal; why the earlier manual test looked like a failure is still unexplained (see FEATURES/INSTALL notes).
+
+## Day 7 (Oct 17): resize and safe-exit audit
+- Audited both features against the real binary (released `dev-latest`, PTY, python driver) before changing code.
+- Already working (checked against the real binary): resize reaches shells and htop; sliver survival; normal quit restores alternate screen, cursor, bracketed paste and raw mode; foreground programs stopped on quit/pane close; failed shell start and no-terminal-on-stdin handled cleanly.
+- **Bug 1 (reproduced):** SIGTERM, SIGHUP or SIGINT killed the app but left the alternate screen, hidden cursor and raw mode (terminal corrupted). Fix: `spawn_signal_thread` turns them into a normal quit (second signal restores and exits at once).
+- **Bug 2 (reproduced):** with dash as the shell, a background job (`sleep 300 &`) survived quit and pane close; only the shell itself was killed. Fix: on pane drop, SIGHUP every process in the shell's session (read from /proc), then kill and reap the shell. `nohup` programs ignore SIGHUP and survive, as intended. bash/zsh/fish already hung up their own jobs.
+- **Bug 3 (evidence: `terminal_resize_reaches_the_shell` failed in CI twice, then passed on re-run):** a resize arriving before crossterm's first poll is never delivered (it starts listening lazily). Fix: the input thread polls once, then re-reads the terminal size and sends it as a resize.
+- Also: closing a pane now reaps the shell (no zombies pile up while the app runs).
+- Test-only switch `TUIOS_TEST_PANIC=1` panics after the first frame so the suite can check the panic path.
+- New `tests/lifecycle.rs` (10 tests).
+- Not covered: SIGKILL, panics in helper threads, real terminal emulators, the laptop.

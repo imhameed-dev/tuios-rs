@@ -29,6 +29,8 @@ files be kept, which the packaging script copies. No source-code disclosure duty
 | vt100 | 0.16.2 | MIT | 2025-07-12 | terminal emulator: escape sequences to a screen grid |
 | crossterm | 0.29.0 | MIT | 2025-04-05 | raw mode, key and resize events |
 
+Two more crates are now named directly in `Cargo.toml`, but **neither is a new crate in the build**: `signal-hook` 0.3.18 (MIT OR Apache-2.0; turns SIGTERM/SIGHUP/SIGINT into a normal quit) and `nix` 0.28.0 (MIT; safe `kill` used to hang up a pane's session). Both were already compiled in through crossterm and portable-pty, so the dependency count and the licence summary above are unchanged; only the direct/transitive label moved.
+
 ## Maintenance observations
 
 | Crate | In build | Newest | Newest released | Note |

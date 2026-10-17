@@ -8,7 +8,9 @@ description = "Rust rewrite of TUIOS (core multiplexer first)"
 
 [dependencies]
 crossterm = "0.29"
+nix = { version = "0.28", default-features = false, features = ["process", "signal"] }
 portable-pty = "0.9"
+signal-hook = "0.3"
 vt100 = "0.16"
 
 [profile.release]

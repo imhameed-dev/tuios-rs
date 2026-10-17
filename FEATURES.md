@@ -12,12 +12,12 @@ Status: **done** = implemented and covered by passing tests in CI on Linux; **pa
 | 9 workspaces | done | `src/workspace.rs`, 8 unit tests; e2e `workspaces_switch_and_stay_isolated`. Moving a window to another workspace has no key yet. |
 | Panes running real shells (PTY) | done | `src/pane.rs`; e2e `shell_runs_a_command_and_exit_closes_the_app` |
 | Terminal emulation | partial | `vt100` crate. Verified with vim, less, htop, bash (see compatibility table). Not supported: mouse reporting, kitty/sixel graphics, kitty keyboard protocol. |
-| Drawing, resize | done | diff renderer (10 unit tests); e2e resize; compat `htop_draws_in_color_follows_resize_and_quits`, `shrinking_the_terminal_to_a_sliver_does_not_crash` |
+| Drawing, resize | done | diff renderer (10 unit tests); e2e resize; compat htop follows resize and sliver test; `tests/lifecycle.rs`: two panes shrink to a sliver and grow back with exact PTY sizes and redraw, and a resize right after launch is never lost |
 | Modal keys (Terminal / Window mode, Ctrl+B prefix) | done, fixed keys | `src/modal.rs`, unit tests (prefix+Tab, rapid sequences, no-leak, hint widths); e2e `panes_modes_and_quit`. Keys follow upstream defaults plus Ctrl+B Tab (next pane without leaving Terminal mode); deviations are marked in the source. Not rebindable until config exists. |
 | Create / focus / close panes | done | e2e + compat. Focus is next / previous / Nth; inactive panes are drawn faint. Directional focus is not implemented. |
 | Minimum pane size | done | New pane refused if any pane would drop under 4x2 (status bar says so). The emulator is never given less than 2x2. Compat `many_panes_on_a_small_terminal_are_refused_politely_not_crashed`. |
 | Paste (bracketed and plain) | done | `input::paste_bytes` (5 unit tests incl. end-marker injection); compat: one line, several lines, into bash with bracketed paste |
-| Cleanup (processes, terminal state) | done | compat: shell exit, killed shell, pane close stops foreground program, quit leaves no processes, quit restores alternate screen / cursor / bracketed paste |
+| Cleanup (processes, terminal state) | done | compat: shell exit, killed shell, pane close stops foreground program, quit leaves no processes, quit restores alternate screen / cursor / bracketed paste. `tests/lifecycle.rs`: raw mode restored after quit, SIGTERM/SIGHUP/SIGINT, panic and failed shell start; background jobs stopped on quit, signal and pane close; no terminal on stdin gives a clean error. Not covered: SIGKILL (cannot be caught), panics in helper threads, `nohup`ed programs (kept on purpose). |
 | Panic safety | done, untested path | terminal is restored before a panic message prints; an emulator panic is caught per pane. The catch path has no test (no known input triggers it now). |
 | Scrollback storage | partial | 1,000 lines stored per pane; no way to scroll or browse them yet |
 | Copy mode (scrollback browse, search, yank) | planned | next |
